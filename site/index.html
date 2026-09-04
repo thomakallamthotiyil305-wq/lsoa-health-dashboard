@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>England &amp; Wales Small-Area Health Atlas — LSOA Health Dashboard</title>
+<meta name="description" content="Interactive map of England and Wales health conditions, prescribing and frailty indicators by Lower Super Output Area (LSOA), built from public NHS, ONS and Welsh Government data.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>%F0%9F%97%BA%EF%B8%8F</text></svg>">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="css/style.css?v=5">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-left">
+    <span class="header-icon" aria-hidden="true">🗺️</span>
+    <div class="header-titles">
+      <h1>England &amp; Wales Small-Area Health Atlas</h1>
+      <p>Health conditions, prescribing &amp; frailty by Lower Super Output Area (LSOA) &mdash; <strong>prototype</strong></p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="search-box">
+      <input id="searchInput" type="text" placeholder="Search LSOA, area name, or local authority…" autocomplete="off" aria-label="Search for an area">
+      <div id="searchResults" class="search-results" hidden></div>
+    </div>
+    <button id="aboutBtn" class="btn-secondary" type="button">ℹ️ Data &amp; methodology</button>
+  </div>
+</header>
+
+<div class="app-body">
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-scroll">
+
+      <div class="country-toggle" role="group" aria-label="Country filter">
+        <button class="country-btn active" data-country="ALL" type="button">England &amp; Wales</button>
+        <button class="country-btn" data-country="E" type="button">England</button>
+        <button class="country-btn" data-country="W" type="button">Wales</button>
+      </div>
+
+      <p class="sidebar-help">Select <strong>one indicator</strong> to shade the map. Click any area for its full profile.</p>
+
+      <div id="layerGroups"><!-- populated by JS --></div>
+
+    </div>
+  </aside>
+
+  <main class="map-wrap">
+    <div id="map"></div>
+
+    <div class="legend" id="legend" aria-live="polite"></div>
+
+    <div class="map-loading" id="mapLoading">
+      <div class="spinner" aria-hidden="true"></div>
+      <p>Loading boundaries for 34,753 LSOAs…</p>
+    </div>
+
+    <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Toggle indicator panel">☰ Indicators</button>
+  </main>
+
+  <aside class="detail-panel" id="detailPanel" aria-live="polite">
+    <button class="detail-panel-close" id="detailPanelClose" type="button" aria-label="Close panel">✕ Close</button>
+    <div class="detail-empty" id="detailEmpty">
+      <p>👆 Click any shaded area on the map to see its full health profile — every indicator, value, year and source in one place.</p>
+    </div>
+    <div class="detail-content" id="detailContent" hidden></div>
+  </aside>
+
+</div>
+
+<div class="modal-backdrop" id="aboutModalBackdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <button class="modal-close" id="aboutModalClose" aria-label="Close">✕</button>
+    <div class="modal-scroll" id="aboutModalBody"><!-- populated by JS --></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<script src="js/sources.js?v=5"></script>
+<script src="js/app.js?v=5"></script>
+</body>
+</html>
