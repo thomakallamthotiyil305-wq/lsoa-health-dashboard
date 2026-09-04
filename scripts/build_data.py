@@ -17,8 +17,10 @@ from collections import defaultdict
 
 import pandas as pd
 
-RAW = Path(__file__).resolve().parent.parent / "data" / "raw"
-OUT = Path(__file__).resolve().parent.parent / "site" / "data"
+ROOT = Path(__file__).resolve().parent.parent
+RAW = ROOT / "data" / "raw"
+STATIC = ROOT / "data" / "static"   # committed, permanently-frozen geography assets
+OUT = ROOT / "site" / "data"
 OUT.mkdir(parents=True, exist_ok=True)
 
 records = defaultdict(dict)   # lsoa_code -> {n, la, c, msoa, v:{...}}
@@ -28,7 +30,10 @@ def get(code):
     return records[code]
 
 # ---------- 1. LSOA -> MSOA -> LAD lookup (name/LA/country backbone) ----------
-with open(RAW / "lsoa_msoa_lad_lookup.csv") as f:
+# Committed under data/static/ (not data/raw/, which is gitignored) because
+# 2011 Census geography never changes — a fresh CI checkout needs this file
+# to exist without fetch_raw.py having to re-fetch it every run.
+with open(STATIC / "lsoa_msoa_lad_lookup.csv") as f:
     for row in csv.DictReader(f):
         code = row["LSOA11CD"]
         rec = get(code)
