@@ -75,16 +75,13 @@ python3 scripts/fetch_raw.py    # downloads/refreshes data/raw/
 python3 scripts/build_data.py   # rebuilds site/data/lsoa_data.json + meta.json
 ```
 
-Boundaries are a one-off, separate step — 2011 LSOA geography is permanently
-frozen, so this never needs to run on a schedule:
+Boundaries are a one-off, separate script — 2011 LSOA geography is
+permanently frozen, so this never needs to run on a schedule and isn't part
+of `fetch_raw.py`. Only run it if `site/data/lsoa_2011.topojson` or
+`data/static/lsoa_msoa_lad_lookup.csv` are ever lost or need regenerating:
 
 ```bash
-# (fetch data/raw/lsoa_2011_bsc.geojson — see the ONS FeatureServer query
-#  documented in git history / sources.js — then:)
-npx mapshaper -i data/raw/lsoa_2011_bsc.geojson \
-  -simplify dp 8% keep-shapes -clean \
-  -o data/processed/lsoa_2011.topojson format=topojson quantization=1e5
-cp data/processed/lsoa_2011.topojson site/data/lsoa_2011.topojson
+python3 scripts/fetch_boundaries.py   # requires Node (uses npx mapshaper)
 ```
 
 ## Local preview
