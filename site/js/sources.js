@@ -26,10 +26,10 @@ const INDICATOR_GROUPS = [
   },
   {
     id: "deprivation",
-    label: "Health deprivation (not cross-nation comparable)",
+    label: "Deprivation (not cross-nation comparable)",
     coverage: "England and Wales, on separate national scales",
-    blurb: "Each nation's own official health-deprivation index. England (IMD2019) and Wales (WIMD2019) use different indicators and different scoring methods — do not compare a score of one nation directly against the other.",
-    keys: ["imd_health_en", "wimd_health_wa"],
+    blurb: "Each nation's own official deprivation indices. England (IMD2019) and Wales (WIMD2019) use different indicators and different scoring methods — do not compare a score of one nation directly against the other. The Wales \"overall\" score covers more than health (income, employment, education, housing etc. are also folded in) — the health domain score above is the health-specific one.",
+    keys: ["imd_health_en", "wimd_health_wa", "wimd_overall_wa"],
   },
 ];
 
