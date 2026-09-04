@@ -69,6 +69,12 @@ a { color: var(--accent-dark); }
 .search-item span { color: var(--text-secondary); font-size: 12px; }
 .search-empty { padding: 10px 12px; color: var(--text-muted); font-size: 13px; }
 
+.freshness-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .btn-secondary {
   padding: 8px 14px;
   border: 1px solid var(--baseline);

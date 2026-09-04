@@ -18,6 +18,10 @@ const state = {
 
 const $ = (sel) => document.querySelector(sel);
 
+function formatGeneratedDate(iso) {
+  return new Date(iso).toLocaleString("en-GB", { dateStyle: "long", timeStyle: "short", timeZone: "UTC" }) + " UTC";
+}
+
 // ---------- Boot ----------
 Promise.all([
   fetch("data/meta.json").then((r) => r.json()),
@@ -35,6 +39,12 @@ Promise.all([
   buildLegend();
   buildAboutModal();
   wireGlobalControls();
+
+  if (meta.generated) {
+    const badge = $("#freshnessBadge");
+    badge.textContent = `📅 Data as of ${formatGeneratedDate(meta.generated)}`;
+    badge.hidden = false;
+  }
 
   $("#mapLoading").style.display = "none";
 }).catch((err) => {
@@ -324,6 +334,8 @@ function wireGlobalControls() {
 function buildAboutModal() {
   const body = $("#aboutModalBody");
 
+  const lastUpdatedText = state.meta.generated ? formatGeneratedDate(state.meta.generated) : "an unknown date";
+
   let sourceRows = "";
   Object.keys(SOURCE_CITATIONS).forEach((key) => {
     const m = state.meta.indicators[key];
@@ -402,8 +414,9 @@ function buildAboutModal() {
     If you need this data in another format, use the source links above to access the original published tables directly.</p>
 
     <h3>Last updated</h3>
-    <p>Data assembled September 2026 from the source snapshots linked above. This is a prototype snapshot, not a live feed — refresh by re-running the
-    build pipeline in this project's repository against updated source files.</p>
+    <p>This dataset was last rebuilt <strong>${lastUpdatedText}</strong>. A scheduled job re-checks every source above weekly and automatically rebuilds
+    and redeploys this site if anything upstream has changed — the "reference year" column in the table above always reflects whatever period was
+    actually current in the source data at that most recent rebuild, not a fixed date written into this page.</p>
   `;
 }
 

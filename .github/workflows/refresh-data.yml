@@ -1,0 +1,61 @@
+name: Refresh health data
+
+on:
+  schedule:
+    # Every Monday 06:00 UTC. QOF/deprivation update annually, prescribing
+    # quarterly, frailty annually — weekly is frequent enough to catch a new
+    # release quickly without hammering the source sites.
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install pandas odfpy openpyxl
+
+      - name: Fetch latest raw data from all sources
+        run: python3 scripts/fetch_raw.py
+
+      - name: Rebuild site/data from raw sources
+        run: python3 scripts/build_data.py
+
+      - name: Commit and push if anything changed
+        id: commit
+        run: |
+          git config user.name "lsoa-dashboard-data-bot"
+          git config user.email "actions@github.com"
+          git add site/data/lsoa_data.json site/data/meta.json
+          if git diff --cached --quiet; then
+            echo "No data changes detected."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Automated data refresh — $(date -u +%Y-%m-%d)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.commit.outputs.changed }}" = "true" ]; then
+            echo "### Data refreshed and pushed ✅" >> "$GITHUB_STEP_SUMMARY"
+            echo "This push will trigger the GitHub Pages deploy workflow, and Render's auto-deploy hook, automatically." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### No upstream changes found — nothing to do" >> "$GITHUB_STEP_SUMMARY"
+          fi
