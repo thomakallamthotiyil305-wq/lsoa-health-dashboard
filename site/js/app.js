@@ -39,7 +39,6 @@ Promise.all([
   buildLegend();
   buildAboutModal();
   wireGlobalControls();
-  wireHowToRead();
 
   if (meta.generated) {
     const badge = $("#freshnessBadge");
@@ -255,37 +254,6 @@ function showDetail(code) {
 }
 
 // ---------- Search ----------
-// ---------- "How to read this map" panel ----------
-const HOW_TO_READ_KEY = "lsoa-dashboard-how-to-read-collapsed";
-
-function wireHowToRead() {
-  const panel = $("#howToRead");
-  const toggle = $("#howToReadToggle");
-
-  let collapsed = false;
-  try {
-    collapsed = localStorage.getItem(HOW_TO_READ_KEY) === "1";
-  } catch (e) {
-    // localStorage unavailable (private mode etc.) — default to expanded, no persistence
-  }
-  setHowToReadState(panel, toggle, collapsed);
-
-  toggle.addEventListener("click", () => {
-    const next = !panel.classList.contains("collapsed");
-    setHowToReadState(panel, toggle, next);
-    try {
-      localStorage.setItem(HOW_TO_READ_KEY, next ? "1" : "0");
-    } catch (e) {
-      // ignore — nothing to persist to
-    }
-  });
-}
-
-function setHowToReadState(panel, toggle, collapsed) {
-  panel.classList.toggle("collapsed", collapsed);
-  toggle.setAttribute("aria-expanded", String(!collapsed));
-}
-
 function wireGlobalControls() {
   const input = $("#searchInput");
   const results = $("#searchResults");
