@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: refresh-data
@@ -51,11 +52,23 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Trigger GitHub Pages deploy
+        # A push made with the default GITHUB_TOKEN deliberately does NOT
+        # trigger other workflows (GitHub's anti-recursion protection), so
+        # pages.yml's `on: push` would otherwise never fire from this bot's
+        # commit. Dispatch it explicitly instead. Render's own GitHub-App
+        # webhook isn't subject to that restriction, so it picks up the push
+        # normally with no equivalent step needed here.
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main
+
       - name: Summary
         run: |
           if [ "${{ steps.commit.outputs.changed }}" = "true" ]; then
             echo "### Data refreshed and pushed ✅" >> "$GITHUB_STEP_SUMMARY"
-            echo "This push will trigger the GitHub Pages deploy workflow, and Render's auto-deploy hook, automatically." >> "$GITHUB_STEP_SUMMARY"
+            echo "Triggered the GitHub Pages deploy workflow explicitly; Render's own webhook picks up the push on its own." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "### No upstream changes found — nothing to do" >> "$GITHUB_STEP_SUMMARY"
           fi
