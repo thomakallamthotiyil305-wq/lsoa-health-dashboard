@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>%F0%9F%97%BA%EF%B8%8F</text></svg>">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="css/style.css?v=13">
+<link rel="stylesheet" href="css/style.css?v=14">
 </head>
 <body>
 
@@ -67,12 +67,7 @@
     <button class="detail-panel-close" id="detailPanelClose" type="button" aria-label="Close panel">✕ Close</button>
     <div class="detail-empty" id="detailEmpty">
       <h2 class="how-to-read-title">ℹ️ How to read this map</h2>
-      <ul class="how-to-read-body">
-        <li><strong>Darker shading</strong> = a higher value for the indicator selected on the left</li>
-        <li><strong>Lighter shading</strong> = a lower value</li>
-        <li><strong>Grey</strong> = no data published for this area for that indicator</li>
-        <li><strong>Click any shaded area</strong> on the map for its full health profile — all 18 indicators, with sources — right here in this panel</li>
-      </ul>
+      <ul class="how-to-read-body" id="howToReadBody"><!-- populated by JS, updates with the selected view mode --></ul>
     </div>
     <div class="detail-content" id="detailContent" hidden></div>
   </aside>
@@ -88,7 +83,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
-<script src="js/sources.js?v=13"></script>
-<script src="js/app.js?v=13"></script>
+<script src="js/sources.js?v=14"></script>
+<script src="js/app.js?v=14"></script>
 </body>
 </html>
