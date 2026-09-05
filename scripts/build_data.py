@@ -54,7 +54,9 @@ detected_years = {}            # indicator key -> year/period string actually us
 time_series = {}                # indicator key -> {year: {lsoa_code: value}}  (QOF + frailty only)
 
 QOF_KEYS = ["chd", "copd", "af", "stroke", "ckd", "hf", "pad", "osteo"]
-TREND_KEYS = QOF_KEYS + ["frailty"]   # indicators with a usable annual series
+PRESCRIBING_KEYS = ["statins", "oac", "anticoag", "clopidogrel", "prasugrel", "ticagrelor"]
+AGE_ADJUSTABLE_KEYS = QOF_KEYS + PRESCRIBING_KEYS   # indicators with a real age-vs-rate relationship worth adjusting for
+TREND_KEYS = QOF_KEYS + PRESCRIBING_KEYS + ["frailty"]   # indicators with a usable annual series
 REFORM_YEARS = [
     {"year": 2013, "label": "PCTs abolished, CCGs created (Health and Social Care Act 2012)"},
     {"year": 2022, "label": "CCGs abolished, Integrated Care Boards created (Health and Care Act 2022)"},
@@ -134,33 +136,45 @@ for key in QOF_KEYS:
         found += 1
     print(f"QOF {key}: {found} LSOAs @ {latest} (auto-detected latest year; {len(years_present)} years of history retained)")
 
-# ---------- 5. Prescribing indicators — latest period auto-detected via .period sidecar ----------
+# ---------- 5. Prescribing indicators — full annual series, one snapshot per year ----------
 # Basenames must match fetch_raw.py's PRESCRIBING_DATASETS keys exactly
-# (it writes "<key>_latest.csv") — this is deliberately not a separately
-# maintained mapping, since a mismatch here fails silently on case-sensitive
+# (it writes "<key>_<year>.csv", one per year using that year's last
+# available quarter) — this is deliberately not a separately maintained
+# mapping, since a mismatch here fails silently on case-sensitive
 # filesystems (macOS masks it; Linux CI runners do not).
-PRESCRIBING_KEYS = ["statins", "oac", "anticoag", "clopidogrel", "prasugrel", "ticagrelor"]
+prescribing_dir = RAW / "prescribing" / "extracted"
 for key in PRESCRIBING_KEYS:
-    csv_path = RAW / "prescribing" / "extracted" / f"{key}_latest.csv"
-    period_path = RAW / "prescribing" / "extracted" / f"{key}_latest.period"
-    if not csv_path.exists():
-        print(f"Prescribing {key}: file missing, skipped")
+    year_files = sorted(prescribing_dir.glob(f"{key}_[0-9][0-9][0-9][0-9].csv")) if prescribing_dir.exists() else []
+    if not year_files:
+        print(f"Prescribing {key}: no year files found, skipped")
         continue
-    period = period_path.read_text().strip() if period_path.exists() else "unknown period"
-    detected_years[key] = period
+
+    by_lsoa_year = defaultdict(dict)
+    for path in year_files:
+        year = path.stem.rsplit("_", 1)[-1]
+        with open(path) as f:
+            for row in csv.DictReader(f):
+                code = row["lsoa11"]
+                if not (code.startswith("E") or code.startswith("W")):
+                    continue
+                rate = row.get("items_r")
+                if not rate or rate == "NA":
+                    continue
+                by_lsoa_year[code][year] = float(rate)
+
+    years_present = sorted({y for yrs in by_lsoa_year.values() for y in yrs}, key=int)
+    latest = years_present[-1]
+    detected_years[key] = f"{latest} (annual snapshot, Q4 or latest available quarter that year)"
+    time_series[key] = {y: {lsoa: yrs[y] for lsoa, yrs in by_lsoa_year.items() if y in yrs} for y in years_present}
+
     found = 0
-    with open(csv_path) as f:
-        for row in csv.DictReader(f):
-            code = row["lsoa11"]
-            if not (code.startswith("E") or code.startswith("W")):
-                continue
-            rate = row.get("items_r")
-            if not rate or rate == "NA":
-                continue
-            rec = get(code)
-            rec.setdefault("v", {})[key] = round(float(rate), 2)
-            found += 1
-    print(f"Prescribing {key}: {found} LSOAs @ {period} (auto-detected latest period)")
+    for lsoa, yrs in by_lsoa_year.items():
+        if latest not in yrs:
+            continue
+        rec = get(lsoa)
+        rec.setdefault("v", {})[key] = round(yrs[latest], 2)
+        found += 1
+    print(f"Prescribing {key}: {found} LSOAs @ {latest} ({len(years_present)} years of history retained: {years_present[0]}-{latest})")
 
 # ---------- 6. Frailty index (MSOA, full annual series) broadcast to member LSOAs ----------
 frailty_dir = RAW / "frailty"
@@ -290,9 +304,10 @@ def fit_age_adjustment(key):
     Indirect-standardisation-style adjustment, NOT a true directly age-
     standardised rate. A true DSR needs age-*specific* prevalence (e.g. a
     separate rate for 65-74, 75-84, 85+) re-weighted onto a standard
-    population's age structure. NHS QOF data is only published as a single
-    all-ages rate per LSOA — no age-specific numerator exists at this
-    geography — so a real DSR cannot be computed from this source.
+    population's age structure. Both QOF disease-prevalence and NHSBSA
+    prescribing data are only published as a single all-ages rate per
+    LSOA — no age-specific numerator exists at this geography for either —
+    so a real DSR cannot be computed from this source.
 
     What this computes instead: fit rate ~ pct65 as a simple linear
     regression across every LSOA with data, then for each LSOA:
@@ -356,15 +371,15 @@ print("\nComputing derived statistics...")
 for key in QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "imd_health_en", "wimd_health_wa", "wimd_overall_wa", "pct65"]:
     add_percentiles(key)
 
-print("Year-on-year change + z-score of change (QOF conditions + frailty):")
+print("Year-on-year change + z-score of change (QOF conditions, prescribing, frailty):")
 for key in TREND_KEYS:
     add_change_stats(key)
 
 if pct65:
-    print("Age-profile-adjusted ratio (QOF conditions only):")
-    for key in QOF_KEYS:
+    print("Age-profile-adjusted ratio (QOF conditions + prescribing):")
+    for key in AGE_ADJUSTABLE_KEYS:
         fit_age_adjustment(key)
-    for key in QOF_KEYS:
+    for key in AGE_ADJUSTABLE_KEYS:
         add_percentiles(f"{key}_adj")
 
 print("National year-by-year aggregates (mean/median/p10/p90):")
@@ -491,7 +506,7 @@ for key in base_keys:
     modes = ["raw", "pctile"]
     if key in TREND_KEYS and f"{key}_yoy" in indicator_values:
         modes += ["yoy", "zscore"]
-    if key in QOF_KEYS and f"{key}_adj" in indicator_values:
+    if key in AGE_ADJUSTABLE_KEYS and f"{key}_adj" in indicator_values:
         modes.append("ageadj")
     m["modes"] = modes
     m["has_trend"] = key in TREND_KEYS and key in time_series

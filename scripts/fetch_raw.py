@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 import urllib.parse
 import zipfile
+from collections import defaultdict
 from pathlib import Path
 
 RAW = Path(__file__).resolve().parent.parent / "data" / "raw"
@@ -111,37 +112,68 @@ def fetch_frailty():
     print(f"  latest year available: {max(y for y, _ in found)}")
 
 
+def _extract_year_snapshots(zip_bytes, out_dir, key):
+    """
+    Given a prescribing zip (either the historical "[Version X]" master
+    archive, or a single "Quarterly <year>" archive), extract every CSV
+    inside, group by year, and write one file per year using that year's
+    last available quarter as its annual snapshot — e.g. p_1_08_2019_Q4_LSOA.csv
+    becomes prescribing/extracted/statins_2019.csv. Using one consistent
+    quarter (the last available each year) makes prescribing's annual
+    series comparable year-to-year the same way QOF's genuinely-annual data
+    is, rather than mixing quarters.
+    Returns the set of years written.
+    """
+    by_year = defaultdict(list)  # year -> [(quarter_num, csv_name)]
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        for name in zf.namelist():
+            if not name.lower().endswith(".csv"):
+                continue
+            m = re.search(r"(\d{4})_Q(\d)", name)
+            if not m:
+                continue
+            by_year[int(m.group(1))].append((int(m.group(2)), name))
+
+        written = set()
+        for year, quarters in by_year.items():
+            quarters.sort()
+            _, csv_name = quarters[-1]  # last available quarter that year
+            save(out_dir / f"{key}_{year}.csv", zf.read(csv_name))
+            written.add(year)
+    return written
+
+
 def fetch_prescribing():
     print("\n== Prescribing indicators (PLDR) ==")
     out_dir = RAW / "prescribing" / "extracted"
     out_dir.mkdir(parents=True, exist_ok=True)
     quarterly_re = re.compile(r"Quarterly[%\s]+(\d{4})\.zip$", re.IGNORECASE)
+    master_re = re.compile(r"%5BVersion", re.IGNORECASE)
 
     for key, pkg_id in PRESCRIBING_DATASETS.items():
         resources = pldr_resources(pkg_id)
-        year_zips = []
+        year_zip_urls = []
+        master_url = None
         for r in resources:
-            m = quarterly_re.search(urllib.parse.unquote(r["url"]))
-            if m:
-                year_zips.append((int(m.group(1)), r["url"]))
-        if not year_zips:
-            print(f"  [WARN] {key}: no quarterly zip found, skipping")
+            url = r["url"]
+            if quarterly_re.search(urllib.parse.unquote(url)):
+                year_zip_urls.append(url)
+            elif master_re.search(url):
+                master_url = url
+        if not year_zip_urls and not master_url:
+            print(f"  [WARN] {key}: no prescribing zips found, skipping")
             continue
-        latest_year, latest_url = max(year_zips, key=lambda t: t[0])
-        zip_bytes = get(latest_url)
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            csv_names = sorted(n for n in zf.namelist() if n.lower().endswith(".csv"))
-            if not csv_names:
-                print(f"  [WARN] {key}: zip for {latest_year} had no CSVs")
-                continue
-            # filenames look like p_1_08_2025_Q4_LSOA.csv — lexical max = latest quarter
-            latest_csv = csv_names[-1]
-            data = zf.read(latest_csv)
-            save(out_dir / f"{key}_latest.csv", data)
-            period_m = re.search(r"(\d{4}_Q\d)", latest_csv)
-            period = period_m.group(1).replace("_", " ") if period_m else str(latest_year)
-            (out_dir / f"{key}_latest.period").write_text(period)
-            print(f"  {key}: latest period = {period}")
+
+        years_written = set()
+        if master_url:
+            years_written |= _extract_year_snapshots(get(master_url), out_dir, key)
+        for url in year_zip_urls:
+            years_written |= _extract_year_snapshots(get(url), out_dir, key)
+
+        if years_written:
+            print(f"  {key}: {len(years_written)} years retained ({min(years_written)}-{max(years_written)})")
+        else:
+            print(f"  [WARN] {key}: zips found but no year snapshots could be extracted")
 
 
 # ---------------------------------------------------------------------------

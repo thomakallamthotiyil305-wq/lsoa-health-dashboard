@@ -645,12 +645,12 @@ function buildAboutModal() {
     </ul>
 
     <h3>Age-adjustment — what it is, and importantly, what it is not</h3>
-    <p>Older populations naturally have higher rates of most of these conditions, so a simple map of raw rates partly just shows "where older people
-    live." To separate that mechanical effect from genuine clustering, this dashboard also shows population aged 65+ (its own map layer) and an
-    <strong>age-adjusted ratio</strong> for the 8 QOF conditions.</p>
-    <p><strong>Important limitation:</strong> a fully rigorous directly age-standardised rate needs age-<em>specific</em> disease rates — e.g. a separate
-    prevalence figure for ages 65–74, 75–84, 85+ — re-weighted onto a standard population. NHS QOF publishes only a single all-ages rate per LSOA; no
-    age-specific breakdown exists at this geography. A true directly-standardised rate therefore cannot be computed from this source. What's shown
+    <p>Older populations naturally have higher rates of most of these conditions — and are prescribed more of these medicines — so a simple map of raw
+    rates partly just shows "where older people live." To separate that mechanical effect from genuine clustering, this dashboard also shows population
+    aged 65+ (its own map layer) and an <strong>age-adjusted ratio</strong> for the 8 QOF conditions and 6 prescribing indicators.</p>
+    <p><strong>Important limitation:</strong> a fully rigorous directly age-standardised rate needs age-<em>specific</em> rates — e.g. a separate
+    prevalence or prescribing figure for ages 65–74, 75–84, 85+ — re-weighted onto a standard population. Neither NHS QOF nor NHSBSA prescribing data
+    publishes an age-specific breakdown at LSOA level. A true directly-standardised rate therefore cannot be computed from this source. What's shown
     instead is an <strong>indirect-standardisation-style ratio</strong>: a simple regression of each condition's rate against local % aged 65+ across
     every LSOA in England, then <code>ratio = observed rate ÷ rate that regression predicts for this area's age profile</code>. This controls for the
     linear relationship between age and prevalence, but not the full age-specific structure a certified age-standardised rate would use — treat it as
@@ -699,7 +699,8 @@ function buildAboutModal() {
     <ul>
       <li><strong>Raw rate</strong> shows only the latest available period per indicator (year shown per indicator above); the year-on-year change and
       z-score use the two most recent years, and the trend charts use every year available in the source archive (back to 2005 for some QOF conditions).</li>
-      <li><strong>Prescribing rates</strong> use the source data's own pre-calculated "items per 1,000 patients" rate field; see each PLDR indicator specification (linked from its dataset page) for the exact denominator methodology. Prescribing does not currently have a multi-year trend view (see below).</li>
+      <li><strong>Prescribing rates</strong> use the source data's own pre-calculated "items per 1,000 patients" rate field; see each PLDR indicator specification (linked from its dataset page) for the exact denominator methodology. Prescribing's annual series uses each year's last available quarter (Q4, where published) as that year's snapshot, so it's comparable year-to-year the same way QOF's genuinely-annual data is.</li>
+      <li><strong>Why deprivation scores don't get a trend/change/age-adjusted view</strong> — this is a deliberate exclusion, not a gap: IMD2019 and WIMD2019 are each a single edition of a composite rank-based index, and ONS/Welsh Government guidance explicitly warns against comparing scores or ranks <em>across</em> editions, because a rank can shift simply because other areas changed relative to it, not because the area itself did. There's no valid "year-on-year change" to compute from one edition, so this dashboard doesn't manufacture one.</li>
       <li><strong>QOF prevalence</strong> is the percentage of a GP practice's registered patients on that condition's disease register, apportioned to LSOA by the home postcodes of registered patients — these are modelled small-area estimates, not direct counts, and carry the uncertainty that implies.</li>
       <li><strong>Frailty</strong> is published at Middle Super Output Area (MSOA) level — roughly 4–5 LSOAs per MSOA — and has been broadcast unchanged to every LSOA within each MSOA so it can be shown on this LSOA-level map. It should be read at MSOA resolution, not interpreted as LSOA-specific.</li>
       <li><strong>Colour classes</strong> are quintiles (five equal-count bins) computed independently per indicator and per view mode across all LSOAs with data, using the 2011 LSOA geography.</li>
