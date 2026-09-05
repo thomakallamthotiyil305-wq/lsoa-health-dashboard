@@ -252,6 +252,35 @@ if age_pop_path.exists() and lookup_path.exists():
 else:
     print("Age profile: source files missing, skipping age-adjustment features")
 
+# ---------- 7b. Census 2011 vs 2021: self-reported general health ----------
+# A genuine two-time-point comparison, unlike the deprivation indices — both
+# censuses ask the same "How is your health in general?" question on the
+# same 5-point scale, a decade apart, so a direct change is meaningful here
+# in a way it explicitly isn't for IMD/WIMD editions.
+census_path = STATIC / "census_general_health.csv"
+CENSUS_KEYS = ["census2011_health", "census2021_health", "census_health_change"]
+if census_path.exists():
+    n_2011 = n_2021 = n_change = 0
+    with open(census_path) as f:
+        for row in csv.DictReader(f):
+            code = row["LSOA11CD"]
+            if code not in records:
+                continue
+            v2011, v2021 = row["pct_bad_health_2011"], row["pct_bad_health_2021"]
+            rec = get(code)
+            if v2011:
+                rec.setdefault("v", {})["census2011_health"] = round(float(v2011), 3)
+                n_2011 += 1
+            if v2021:
+                rec.setdefault("v", {})["census2021_health"] = round(float(v2021), 3)
+                n_2021 += 1
+            if v2011 and v2021:
+                rec["v"]["census_health_change"] = round(float(v2021) - float(v2011), 3)
+                n_change += 1
+    print(f"Census general health: {n_2011} LSOAs @ 2011, {n_2021} @ 2021, {n_change} with both years for change")
+else:
+    print("Census general health: source file missing, skipped (run scripts/fetch_census.py)")
+
 # ---------- 8. Derived statistic: percentile rank (0-100) for every indicator ----------
 def add_percentiles(key):
     pairs = [(code, rec["v"][key]) for code, rec in records.items() if key in rec.get("v", {})]
@@ -368,7 +397,7 @@ def national_trend(key):
 
 
 print("\nComputing derived statistics...")
-for key in QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "imd_health_en", "wimd_health_wa", "wimd_overall_wa", "pct65"]:
+for key in QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "imd_health_en", "wimd_health_wa", "wimd_overall_wa", "pct65"] + CENSUS_KEYS:
     add_percentiles(key)
 
 print("Year-on-year change + z-score of change (QOF conditions, prescribing, frailty):")
@@ -410,7 +439,7 @@ for rec in final.values():
     for k, v in rec["v"].items():
         indicator_values[k].append(v)
 
-ALL_BASE_KEYS_ORDER = QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "imd_health_en", "wimd_health_wa", "wimd_overall_wa", "pct65"]
+ALL_BASE_KEYS_ORDER = QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "imd_health_en", "wimd_health_wa", "wimd_overall_wa", "pct65"] + CENSUS_KEYS
 SUFFIXES_ORDER = ["", "_pctile", "_yoy", "_z", "_adj", "_adj_pctile"]
 schema = [
     f"{base}{suf}"
@@ -485,8 +514,14 @@ INDICATOR_META = {
     "wimd_health_wa": {"label": "Health domain score (Wales)", "group": "Deprivation", "unit": "WIMD2019 Health Domain score (higher = worse)", "source": "Welsh Government, WIMD 2019", "coverage": "Wales only"},
     "wimd_overall_wa": {"label": "Overall deprivation score (Wales)", "group": "Deprivation", "unit": "WIMD2019 overall score (higher = worse)", "source": "Welsh Government, WIMD 2019", "coverage": "Wales only"},
     "pct65": {"label": "Population aged 65+", "group": "Population context", "unit": "% of usual residents", "source": "ONS mid-year LSOA population estimates by broad age band", "coverage": "England & Wales"},
+    "census2011_health": {"label": "Bad/very bad health (Census 2011)", "group": "Census: self-reported health", "unit": "% of usual residents reporting bad or very bad general health", "source": "ONS Census 2011, table KS301EW, via Nomis", "coverage": "England & Wales"},
+    "census2021_health": {"label": "Bad/very bad health (Census 2021)", "group": "Census: self-reported health", "unit": "% of usual residents reporting bad or very bad general health", "source": "ONS Census 2021, table TS037, via Nomis", "coverage": "England & Wales"},
+    "census_health_change": {"label": "Change in bad health, 2011→2021", "group": "Census: self-reported health", "unit": "percentage-point change (2021 minus 2011)", "source": "ONS Census 2011 (KS301EW) and 2021 (TS037), via Nomis", "coverage": "England & Wales", "scale": "diverging"},
 }
-STATIC_YEAR_FALLBACK = {"imd_health_en": "2019", "wimd_health_wa": "2019", "wimd_overall_wa": "2019", "pct65": "n/a"}
+STATIC_YEAR_FALLBACK = {
+    "imd_health_en": "2019", "wimd_health_wa": "2019", "wimd_overall_wa": "2019", "pct65": "n/a",
+    "census2011_health": "2011", "census2021_health": "2021", "census_health_change": "2011 vs 2021",
+}
 
 all_keys = set(indicator_values.keys())
 

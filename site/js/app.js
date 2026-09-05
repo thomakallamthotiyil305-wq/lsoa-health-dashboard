@@ -66,6 +66,7 @@ Promise.all([
   buildLegend();
   buildHowToRead();
   buildAboutModal();
+  buildForecastModal();
   wireGlobalControls();
 
   if (meta.generated) {
@@ -186,10 +187,12 @@ function buildHowToRead() {
   const el = $("#howToReadBody");
   if (!el) return;
   const mode = state.viewMode;
+  const activeMeta = state.meta.indicators[state.activeKey];
+  const rawIsDiverging = mode === "raw" && activeMeta && activeMeta.scale === "diverging";
   const swatch = (c) => `<span class="mini-swatch" style="background:${c}"></span>`;
   let html = "";
 
-  if (mode === "raw") {
+  if (mode === "raw" && !rawIsDiverging) {
     html = `
       <li>${swatch(RAMP_SEQUENTIAL[4])}<strong>Darker blue</strong> = a higher value for the indicator selected on the left</li>
       <li>${swatch(RAMP_SEQUENTIAL[0])}<strong>Lighter blue</strong> = a lower value</li>
@@ -241,9 +244,14 @@ function setActiveIndicator(key) {
 }
 
 // ---------- Color logic ----------
-function rampFor(mode) {
+function rampFor(mode, m) {
   if (mode === "pctile") return RAMP_VIRIDIS;
   if (mode === "yoy" || mode === "zscore" || mode === "ageadj") return RAMP_DIVERGING;
+  // A handful of indicators (e.g. the census 2011->2021 change) are
+  // inherently signed even in "raw" mode — a plain sequential ramp would
+  // make a decrease and an increase look like "less" and "more" of the
+  // same thing, rather than opposite directions.
+  if (mode === "raw" && m && m.scale === "diverging") return RAMP_DIVERGING;
   return RAMP_SEQUENTIAL;
 }
 
@@ -261,7 +269,7 @@ function breaksFor(m, mode) {
 function colorFor(value, m, mode) {
   if (value === undefined || value === null) return NO_DATA_COLOR;
   const b = breaksFor(m, mode);
-  const ramp = rampFor(mode);
+  const ramp = rampFor(mode, m);
   if (value <= b[0]) return ramp[0];
   if (value <= b[1]) return ramp[1];
   if (value <= b[2]) return ramp[2];
@@ -316,8 +324,10 @@ function buildMap(geojson) {
         if (!rec) return;
         const m = state.meta.indicators[state.activeKey];
         const v = getVal(rec, state.activeKey, state.viewMode);
-        const unit = state.viewMode === "pctile" ? "th percentile" : state.viewMode === "raw" ? ` ${m.unit}` : ` (${VIEW_MODES.find(x => x.id === state.viewMode).short})`;
-        const valTxt = v === undefined ? "No data" : `${v}${unit}`;
+        const valTxt = v === undefined ? "No data"
+          : state.viewMode === "pctile" ? `${ordinal(v)} percentile`
+          : state.viewMode === "raw" ? `${v} ${m.unit}`
+          : `${v} (${VIEW_MODES.find(x => x.id === state.viewMode).short})`;
         layer.bindTooltip(`<strong>${rec.n}</strong><br>${rec.la}<br>${m.label}: ${valTxt}`, {
           sticky: true,
           className: "lsoa-tooltip",
@@ -339,7 +349,7 @@ function buildLegend() {
   const m = state.meta.indicators[state.activeKey];
   const mode = state.viewMode;
   const b = breaksFor(m, mode);
-  const ramp = rampFor(mode);
+  const ramp = rampFor(mode, m);
   const el = $("#legend");
   const fmt = (n) => (Math.abs(n) >= 100 ? Math.round(n) : n);
   const unitLabel = mode === "raw" ? m.unit
@@ -366,10 +376,18 @@ function buildLegend() {
 }
 
 // ---------- Detail panel ----------
+function ordinal(n) {
+  const r = Math.round(n);
+  const mod100 = r % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${r}th`;
+  const mod10 = r % 10;
+  return `${r}${mod10 === 1 ? "st" : mod10 === 2 ? "nd" : mod10 === 3 ? "rd" : "th"}`;
+}
+
 function formatStat(v, suffix) {
   if (v === undefined || v === null) return null;
   const r2 = Math.round(v * 100) / 100;
-  return suffix === "pctile" ? `${Math.round(v)}th percentile`
+  return suffix === "pctile" ? `${ordinal(v)} percentile`
     : suffix === "yoy" ? `${r2 > 0 ? "+" : ""}${r2}% vs last year`
     : suffix === "z" ? `z ${r2 > 0 ? "+" : ""}${r2}`
     : suffix === "adj" ? `age-adjusted ×${r2}`
@@ -615,8 +633,23 @@ function wireGlobalControls() {
   $("#aboutModalBackdrop").addEventListener("click", (e) => {
     if (e.target.id === "aboutModalBackdrop") $("#aboutModalBackdrop").hidden = true;
   });
+
+  // Compare & Forecast modal
+  $("#forecastBtn").addEventListener("click", () => {
+    $("#forecastModalBackdrop").hidden = false;
+  });
+  $("#forecastModalClose").addEventListener("click", () => {
+    $("#forecastModalBackdrop").hidden = true;
+  });
+  $("#forecastModalBackdrop").addEventListener("click", (e) => {
+    if (e.target.id === "forecastModalBackdrop") $("#forecastModalBackdrop").hidden = true;
+  });
+
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") $("#aboutModalBackdrop").hidden = true;
+    if (e.key === "Escape") {
+      $("#aboutModalBackdrop").hidden = true;
+      $("#forecastModalBackdrop").hidden = true;
+    }
   });
 }
 
@@ -823,6 +856,207 @@ function buildNationalTrendChart(key) {
       <p class="national-trend-caption">England mean (line) &amp; 10th–90th percentile spread (shaded), ${m.unit}</p>
     </div>
   `;
+}
+
+// ============================================================================
+// "Compare & Forecast" — cross-year Census comparison + simple trend forecasts
+// ============================================================================
+
+// Ordinary least-squares linear trend, fit on whatever years are available,
+// extrapolated `horizon` years past the last observed year. This is
+// deliberately the simplest defensible forecasting method rather than
+// something like ARIMA or exponential smoothing: it's fully transparent
+// (a straight line through the historical trend), matching the "how did we
+// get this number" standard the rest of this dashboard holds itself to.
+// See the Method & references section in the modal for the citation and
+// the caveats that come with any naive trend extrapolation.
+function computeLinearForecast(years, values, horizon) {
+  const pts = years.map((y, i) => ({ x: y, y: values[i] })).filter((p) => p.y !== null && p.y !== undefined && isFinite(p.y));
+  if (pts.length < 4) return null; // too few points for a defensible fit
+
+  const n = pts.length;
+  const meanX = pts.reduce((s, p) => s + p.x, 0) / n;
+  const meanY = pts.reduce((s, p) => s + p.y, 0) / n;
+  let num = 0, den = 0;
+  pts.forEach((p) => { num += (p.x - meanX) * (p.y - meanY); den += (p.x - meanX) ** 2; });
+  const slope = den === 0 ? 0 : num / den;
+  const intercept = meanY - slope * meanX;
+
+  let ssResid = 0;
+  pts.forEach((p) => { const pred = intercept + slope * p.x; ssResid += (p.y - pred) ** 2; });
+  const se = Math.sqrt(ssResid / Math.max(n - 2, 1));
+
+  const lastYear = years[years.length - 1];
+  const fYears = [], fValues = [], fLow = [], fHigh = [];
+  for (let i = 1; i <= horizon; i++) {
+    const x0 = lastYear + i;
+    const pred = intercept + slope * x0;
+    // Standard prediction-interval formula for a new observation from a
+    // fitted simple linear regression (widens the further x0 is from the
+    // years actually observed) — a 95% interval, z = 1.96.
+    const sePred = se * Math.sqrt(1 + 1 / n + ((x0 - meanX) ** 2) / (den || 1));
+    fYears.push(x0);
+    fValues.push(pred);
+    fLow.push(pred - 1.96 * sePred);
+    fHigh.push(pred + 1.96 * sePred);
+  }
+  return { slope, nPoints: n, years: fYears, values: fValues, low: fLow, high: fHigh };
+}
+
+const FORECAST_HORIZON = 3;
+
+function buildForecastChartSVG(key) {
+  const nt = state.meta.national_trends[key];
+  const m = state.meta.indicators[key];
+  if (!nt) return `<p class="nodata">No multi-year series available for this indicator.</p>`;
+
+  const forecast = computeLinearForecast(nt.years, nt.mean, FORECAST_HORIZON);
+  const W = 520, H = 220, padL = 44, padR = 14, padT = 18, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const allHistVals = [...nt.p10, ...nt.p90].filter((v) => v !== null);
+  const allVals = forecast ? [...allHistVals, ...forecast.low, ...forecast.high] : allHistVals;
+  const yMin = Math.min(...allVals), yMax = Math.max(...allVals);
+  const yRange = (yMax - yMin) || 1;
+  const xMin = nt.years[0];
+  const xMax = forecast ? forecast.years[forecast.years.length - 1] : nt.years[nt.years.length - 1];
+  const xRange = (xMax - xMin) || 1;
+  const xPos = (y) => padL + ((y - xMin) / xRange) * plotW;
+  const yPos = (v) => padT + plotH - ((v - yMin) / yRange) * plotH;
+
+  const bandPath = nt.years.map((y, i) => `${i === 0 ? "M" : "L"}${xPos(y).toFixed(1)},${yPos(nt.p90[i]).toFixed(1)}`).join(" ") +
+    " " + nt.years.slice().reverse().map((y, i) => `L${xPos(y).toFixed(1)},${yPos(nt.p10[nt.p10.length - 1 - i]).toFixed(1)}`).join(" ") + " Z";
+  const meanPath = nt.years.map((y, i) => `${i === 0 ? "M" : "L"}${xPos(y).toFixed(1)},${yPos(nt.mean[i]).toFixed(1)}`).join(" ");
+
+  let forecastBand = "", forecastLine = "", forecastLabel = "";
+  if (forecast) {
+    const lastYear = nt.years[nt.years.length - 1];
+    const lastMean = nt.mean[nt.mean.length - 1];
+    const fYearsWithAnchor = [lastYear, ...forecast.years];
+    const fLowWithAnchor = [lastMean, ...forecast.low];
+    const fHighWithAnchor = [lastMean, ...forecast.high];
+    forecastBand = fYearsWithAnchor.map((y, i) => `${i === 0 ? "M" : "L"}${xPos(y).toFixed(1)},${yPos(fHighWithAnchor[i]).toFixed(1)}`).join(" ") +
+      " " + fYearsWithAnchor.slice().reverse().map((y, i) => `L${xPos(y).toFixed(1)},${yPos(fLowWithAnchor[fLowWithAnchor.length - 1 - i]).toFixed(1)}`).join(" ") + " Z";
+    forecastLine = [lastYear, ...forecast.years].map((y, i) => `${i === 0 ? "M" : "L"}${xPos(y).toFixed(1)},${yPos([lastMean, ...forecast.values][i]).toFixed(1)}`).join(" ");
+    forecastLabel = `<text x="${xPos(forecast.years[forecast.years.length - 1]).toFixed(1)}" y="${yPos(forecast.values[forecast.values.length - 1]) - 8}" font-size="9" fill="var(--series-orange, #eb6834)" text-anchor="end">forecast →</text>`;
+  }
+
+  const reformLines = (state.meta.reform_years || [])
+    .filter((r) => r.year >= xMin && r.year <= nt.years[nt.years.length - 1])
+    .map((r) => `<line x1="${xPos(r.year).toFixed(1)}" y1="${padT}" x2="${xPos(r.year).toFixed(1)}" y2="${padT + plotH}" stroke="var(--text-muted)" stroke-dasharray="2,2" stroke-width="1" />`)
+    .join("");
+
+  const yearLabels = [xMin, nt.years[nt.years.length - 1], xMax].filter((v, i, a) => a.indexOf(v) === i)
+    .map((y) => `<text x="${xPos(y).toFixed(1)}" y="${H - 8}" font-size="9" fill="var(--text-muted)" text-anchor="middle">${y}</text>`).join("");
+
+  return `
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${m.label} historical trend and ${FORECAST_HORIZON}-year forecast" style="width:100%;height:auto;">
+      <path d="${bandPath}" fill="var(--accent)" opacity="0.12" stroke="none" />
+      ${forecast ? `<path d="${forecastBand}" fill="#eb6834" opacity="0.12" stroke="none" />` : ""}
+      ${reformLines}
+      <path d="${meanPath}" fill="none" stroke="var(--accent)" stroke-width="2" />
+      ${forecast ? `<path d="${forecastLine}" fill="none" stroke="#eb6834" stroke-width="2" stroke-dasharray="5,4" />` : ""}
+      ${forecastLabel}
+      <text x="${padL - 6}" y="${padT + 4}" font-size="9" fill="var(--text-muted)" text-anchor="end">${fmtAxis(yMax)}</text>
+      <text x="${padL - 6}" y="${padT + plotH}" font-size="9" fill="var(--text-muted)" text-anchor="end">${fmtAxis(yMin)}</text>
+      ${yearLabels}
+    </svg>
+  `;
+}
+
+function renderForecastChart(key) {
+  const holder = $("#forecastChartHolder");
+  const m = state.meta.indicators[key];
+  const forecast = computeLinearForecast(state.meta.national_trends[key].years, state.meta.national_trends[key].mean, FORECAST_HORIZON);
+  holder.innerHTML = buildForecastChartSVG(key);
+
+  const notesEl = $("#forecastNotes");
+  if (!forecast) {
+    notesEl.innerHTML = `<p class="nodata">Not enough historical data points for ${m.label} to fit a trend line.</p>`;
+    return;
+  }
+  const direction = forecast.slope > 0 ? "rising" : forecast.slope < 0 ? "falling" : "flat";
+  const lastForecast = forecast.values[forecast.values.length - 1];
+  const lastYear = forecast.years[forecast.years.length - 1];
+  const lastLow = forecast.low[forecast.low.length - 1];
+  const lastHigh = forecast.high[forecast.high.length - 1];
+  notesEl.innerHTML = `
+    <p><strong>${m.label}</strong> has been ${direction} nationally by about
+    <strong>${Math.abs(forecast.slope).toFixed(3)} ${m.unit} per year</strong> on average (simple linear trend fit across
+    ${forecast.nPoints} years of data). Extrapolating that straight line forward, ${lastYear} would be roughly
+    <strong>${fmtAxis(lastForecast)} ${m.unit}</strong> — with a wide plausible range of
+    <strong>${fmtAxis(lastLow)} to ${fmtAxis(lastHigh)}</strong> even under this simple model.</p>
+    <p class="modal-lede" style="margin-top:10px;"><strong>This is a naive trend extrapolation, not a real forecast.</strong>
+    It only knows "the line went this way before" — it has no idea about future NHS reforms, funding changes, new
+    treatments, or events like a pandemic, all of which have visibly bent these lines in the past (see the dashed
+    reform markers). Treat the shaded band as "plausible if absolutely nothing changes," not a prediction anyone
+    should plan around.</p>
+  `;
+}
+
+function buildForecastModal() {
+  const body = $("#forecastModalBody");
+
+  // National census summary, computed live from the loaded per-LSOA data
+  // (population-weighting isn't attempted here — this is a simple mean
+  // across LSOAs, each treated equally regardless of population size).
+  let sum2011 = 0, n2011 = 0, sum2021 = 0, n2021 = 0;
+  for (const code in state.data) {
+    const rec = state.data[code];
+    const v11 = getVal(rec, "census2011_health", "raw");
+    const v21 = getVal(rec, "census2021_health", "raw");
+    if (v11 !== undefined) { sum2011 += v11; n2011++; }
+    if (v21 !== undefined) { sum2021 += v21; n2021++; }
+  }
+  const mean2011 = sum2011 / n2011, mean2021 = sum2021 / n2021;
+  const censusChange = mean2021 - mean2011;
+
+  const trendKeys = Object.keys(state.meta.indicators).filter((k) => state.meta.indicators[k].has_trend);
+  const trendOptions = trendKeys.map((k) =>
+    `<option value="${k}">${state.meta.indicators[k].label}</option>`
+  ).join("");
+
+  body.innerHTML = `
+    <h2 id="forecastTitle">📈 Compare & Forecast</h2>
+    <p class="modal-lede">Two things live here: a genuine like-for-like comparison across the two most recent UK Censuses,
+    and simple statistical trend projections for the indicators with a multi-year history. Both come with full
+    citations and honest caveats — nothing here should be read as a certain prediction.</p>
+
+    <h3>Census 2011 vs 2021: has self-reported health changed?</h3>
+    <p>Both censuses asked the same question — <em>"How is your health in general?"</em> — on the same five-point scale
+    (Very good / Good / Fair / Bad / Very bad), a decade apart. That shared wording and scale is what makes this a
+    genuinely valid comparison, unlike the deprivation indices elsewhere in this dashboard.</p>
+    <div class="census-stat-row">
+      <div class="census-stat"><div class="census-stat-label">2011</div><div class="census-stat-value">${mean2011.toFixed(2)}%</div><div class="census-stat-sub">reporting bad/very bad health</div></div>
+      <div class="census-stat"><div class="census-stat-label">2021</div><div class="census-stat-value">${mean2021.toFixed(2)}%</div><div class="census-stat-sub">reporting bad/very bad health</div></div>
+      <div class="census-stat"><div class="census-stat-label">Change</div><div class="census-stat-value">${censusChange > 0 ? "+" : ""}${censusChange.toFixed(2)} pp</div><div class="census-stat-sub">England &amp; Wales average, unweighted across LSOAs</div></div>
+    </div>
+    <p>This is also on the map itself — look for the <strong>"Census: self-reported health"</strong> group in the sidebar,
+    with 2011, 2021, and the change between them as three separate layers you can explore area-by-area.</p>
+
+    <h3>Simple trend forecasts</h3>
+    <p>Pick an indicator to see its England-wide trend and a ${FORECAST_HORIZON}-year projection:</p>
+    <select id="forecastIndicatorPicker" class="forecast-picker">${trendOptions}</select>
+    <div id="forecastChartHolder" class="forecast-chart-holder"></div>
+    <div id="forecastNotes"></div>
+
+    <h3>Method &amp; full references</h3>
+    <ul>
+      <li><strong>Forecasting method:</strong> ordinary least-squares linear regression fit to the full available annual
+      series, extrapolated ${FORECAST_HORIZON} years past the last observed year, with a standard prediction interval
+      (95%) that widens the further the forecast extends — the same textbook approach as
+      <a href="${FORECAST_REFERENCE.url}" target="_blank" rel="noopener">${FORECAST_REFERENCE.authors} — <em>${FORECAST_REFERENCE.title}</em></a>,
+      a freely available open-access textbook, describes as the simplest defensible trend-extrapolation model. More
+      sophisticated approaches exist (exponential smoothing, ARIMA, structural break detection around known reforms) —
+      deliberately not used here, in favour of a method any reader can sanity-check by eye against the chart.</li>
+      <li><strong>Census 2011 general health:</strong> <a href="${SOURCE_CITATIONS.census2011_health.url}" target="_blank" rel="noopener">${SOURCE_CITATIONS.census2011_health.dataset}</a>, ${SOURCE_CITATIONS.census2011_health.publisher}.</li>
+      <li><strong>Census 2021 general health:</strong> <a href="${SOURCE_CITATIONS.census2021_health.url}" target="_blank" rel="noopener">${SOURCE_CITATIONS.census2021_health.dataset}</a>, ${SOURCE_CITATIONS.census2021_health.publisher}.</li>
+      <li><strong>2021 figures</strong> are published on 2021 LSOA boundaries; they're matched onto the 2011 LSOAs used throughout this dashboard via the same ONS exact-fit crosswalk documented in "Data &amp; methodology".</li>
+    </ul>
+  `;
+
+  $("#forecastIndicatorPicker").addEventListener("change", (e) => renderForecastChart(e.target.value));
+  if (trendKeys.length) renderForecastChart(trendKeys[0]);
 }
 
 })();

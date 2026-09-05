@@ -38,6 +38,13 @@ const INDICATOR_GROUPS = [
     blurb: "Not a disease measure — shown so you can see for yourself how much of a disease pattern might simply track where older people live. This is also the covariate behind every \"age-adjusted\" view below.",
     keys: ["pct65"],
   },
+  {
+    id: "census",
+    label: "Census: self-reported health",
+    coverage: "England and Wales",
+    blurb: "The only genuine like-for-like comparison across years in this dashboard: both the 2011 and 2021 Censuses asked \"How is your health in general?\" on the same five-point scale, a decade apart. Shown here as the % answering \"Bad\" or \"Very bad\", plus the change between the two censuses.",
+    keys: ["census2011_health", "census2021_health", "census_health_change"],
+  },
 ];
 
 // Which analysis "views" exist, in the order offered to the user. Only the
@@ -77,6 +84,18 @@ const SOURCE_CITATIONS = {
   wimd_health_wa:{ dataset: "Welsh Index of Multiple Deprivation 2019 — Health Domain score", publisher: "Welsh Government", url: "https://www.gov.wales/welsh-index-multiple-deprivation-full-index-update-ranks-2019" },
   wimd_overall_wa:{ dataset: "Welsh Index of Multiple Deprivation 2019 — Overall score", publisher: "Welsh Government", url: "https://www.gov.wales/welsh-index-multiple-deprivation-full-index-update-ranks-2019" },
   pct65:        { dataset: "Population estimates for LSOAs by broad age band", publisher: "Office for National Statistics", url: "https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimatesnationalstatistics" },
+  census2011_health:  { dataset: "Census 2011, table KS301EW — Health and provision of unpaid care", publisher: "Office for National Statistics, via Nomis", url: "https://www.nomisweb.co.uk/census/2011/ks301ew" },
+  census2021_health:  { dataset: "Census 2021, table TS037 — General health", publisher: "Office for National Statistics, via Nomis", url: "https://www.nomisweb.co.uk/datasets/c2021ts037" },
+  census_health_change: { dataset: "Census 2011 (KS301EW) and Census 2021 (TS037) — General health, compared", publisher: "Office for National Statistics, via Nomis", url: "https://www.nomisweb.co.uk/datasets/c2021ts037" },
+};
+
+// General reference for the simple forecasting method used in the
+// "Compare & Forecast" panel — a standard, citable open-access source
+// rather than an uncredited technique.
+const FORECAST_REFERENCE = {
+  title: "Forecasting: Principles and Practice (3rd ed.), Section 5.2 — \"The linear trend model\"",
+  authors: "Rob J Hyndman & George Athanasopoulos",
+  url: "https://otexts.com/fpp3/regression-intro.html",
 };
 
 const BOUNDARY_SOURCE = {

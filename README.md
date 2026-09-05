@@ -43,12 +43,24 @@ structure, that one step might need a URL bump (everything else needs none).
   the only folder published to GitHub Pages / Render.
 - `scripts/fetch_raw.py` — downloads/refreshes everything in `data/raw/`,
   auto-discovering the latest period per source (see above).
-- `scripts/build_data.py` — joins `data/raw/` into
-  `site/data/lsoa_data.json` (per-LSOA indicator values) and
-  `site/data/meta.json` (indicator definitions, units, auto-detected years,
-  quintile breaks, and a `generated` build timestamp shown in-app).
+- `scripts/build_data.py` — joins `data/raw/` into `site/data/lsoa_data.json`
+  (per-LSOA indicator values, packed into a compact schema-indexed array —
+  see the file's own header comment) and `site/data/meta.json` (indicator
+  definitions, units, sources, auto-detected years, quintile breaks, national
+  year-by-year aggregates, and a `generated` build timestamp shown in-app).
+  Also writes `site/data/trend_<key>.json` — one lazy-loaded file per
+  indicator with a multi-year history, fetched only when a user opens that
+  indicator's trend view (not part of the main payload).
+- `scripts/fetch_census.py` — **one-off**, like `fetch_boundaries.py`: pulls
+  self-reported general health from the 2011 and 2021 Censuses (Nomis API),
+  the one genuine two-time-point comparison in this dashboard. Not run on a
+  schedule — nothing changes here until the next Census in 2031.
 - `data/raw/` — downloaded source files. **Not committed** (see
-  `.gitignore`) because it's ~700MB; `fetch_raw.py` re-creates it.
+  `.gitignore`) because it's ~1GB; `fetch_raw.py` re-creates it.
+- `data/static/` — small, permanently-frozen assets that *are* committed
+  (geography lookups, the age-population crosswalk, the Census summary) —
+  see each script's header comment for why each one belongs here rather than
+  in `data/raw/`.
 - `data/processed/` — simplified TopoJSON boundaries, generated via
   `mapshaper`. Not committed either — see the boundaries note below.
 
@@ -61,11 +73,42 @@ structure, that one step might need a URL bump (everything else needs none).
 | Frailty | Small Area Frailty Index via PLDR (MSOA) | England |
 | Health deprivation | MHCLG English Indices of Deprivation 2019 | England |
 | Health deprivation | Welsh Index of Multiple Deprivation 2019 | Wales |
+| Self-reported general health, Census 2011 | ONS, table KS301EW, via Nomis | England & Wales |
+| Self-reported general health, Census 2021 | ONS, table TS037, via Nomis | England & Wales |
 | Boundaries | ONS Open Geography Portal, LSOA (Dec 2011) BSC | England & Wales |
 | Geography lookup | ONS OA→LSOA→MSOA→LAD (Dec 2011) Exact Fit | England & Wales |
+| Population by age | ONS mid-year LSOA population estimates | England & Wales |
 
 Full per-indicator citations, licences and caveats are in
 `site/js/sources.js` and rendered in the app's "Data & methodology" modal.
+
+## Beyond raw values: percentile rank, change, and age-adjustment
+
+Every indicator can be viewed as its raw value, a 0–100 percentile rank
+(Viridis palette), or — for the 8 QOF conditions, 6 prescribing indicators
+and frailty, which have a genuine multi-year annual series — year-on-year
+% change, a change z-score, and an age-adjusted ratio. See `build_data.py`'s
+module docstring for exact formulas, and the in-app "Data & methodology"
+glossary for plain-language explanations with worked examples.
+
+## Compare & Forecast
+
+A second modal (separate from "Data & methodology") holds two more things:
+
+- **Census 2011 vs 2021**: both censuses asked the same "How is your health
+  in general?" question on the same five-point scale, which is what makes
+  this the one genuinely valid cross-year comparison in the dashboard —
+  unlike the deprivation indices, which are explicitly *not* comparable
+  across editions (see the in-app explanation). Also selectable as three map
+  layers: 2011, 2021, and the change between them.
+- **Simple trend forecasts**: an ordinary-least-squares linear trend fit to
+  each multi-year indicator's national series, extrapolated 3 years with a
+  proper widening prediction interval. Deliberately the simplest defensible
+  method (see `computeLinearForecast()` in `app.js`) rather than ARIMA/
+  exponential smoothing, so a reader can sanity-check it by eye — and
+  explicitly labelled as a naive extrapolation, not a real forecast, since it
+  has no way to know about future reforms, funding changes, or events like a
+  pandemic.
 
 ## Running the pipeline manually
 
@@ -84,6 +127,13 @@ of `fetch_raw.py`. Only run it if `site/data/lsoa_2011.topojson` or
 python3 scripts/fetch_boundaries.py   # requires Node (uses npx mapshaper)
 ```
 
+Census data is the same story — one-off, not scheduled, since nothing changes
+until the 2031 Census:
+
+```bash
+python3 scripts/fetch_census.py   # requires data/static/lsoa11_to_lsoa21_lookup.csv to already exist
+```
+
 ## Local preview
 
 ```bash
@@ -92,11 +142,20 @@ python3 -m http.server 8642 --directory site
 
 ## Known limitations / next steps
 
-- Shows only the latest available period per indicator (no time trend yet —
-  raw archives support one back to 2005 for QOF, 2010 for prescribing).
+- Deprivation indices (IMD2019/WIMD2019) deliberately have no trend/change/
+  age-adjusted view — they're single-edition composite indices, and ONS/
+  Welsh Government guidance warns against comparing scores or ranks across
+  editions. This is a methodological choice, not a missing feature.
+- The age-adjusted ratio is an indirect-standardisation-style approximation
+  (regression against local % 65+), not a true directly age-standardised
+  rate — neither QOF nor NHSBSA data publishes age-specific rates at LSOA
+  level, so a certified DSR isn't computable from this source. Stated
+  plainly in-app rather than overclaiming rigour.
 - Frailty is MSOA-level data broadcast to member LSOAs, not LSOA-native.
 - Wales has no public LSOA-level clinical disease-register data at the time
   of writing; Wales uses WIMD2019 Health Domain instead (see methodology
   panel for the full explanation).
+- The trend forecast is a naive linear extrapolation, explicitly labelled as
+  such — it cannot anticipate future reforms, funding changes, or shocks.
 - Boundaries are geometry-simplified for web performance, not for spatial
   analysis.
