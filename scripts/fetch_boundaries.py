@@ -34,11 +34,22 @@ LOOKUP_QUERY_URL = (
     "https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/"
     "OA11_LSOA11_MSOA11_LAD11_EW_LUv2_b3fe7c68f4b2420185eaff6284d4c125/FeatureServer/0/query"
 )
+LSOA11_TO_LSOA21_QUERY_URL = (
+    "https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/"
+    "LSOA11_LSOA21_LAD22_EW_LU_v5/FeatureServer/0/query"
+)
 PAGE_SIZE = 2000
 
 
 def query_all_pages(base_url, params, extract):
-    """Paginate an ArcGIS FeatureServer query, yielding accumulated results."""
+    """Paginate an ArcGIS FeatureServer query, yielding accumulated results.
+
+    Advances the offset by however many records actually came back, not by
+    the requested page size — some FeatureServer layers cap results below
+    what you ask for (this one caps at 1000 even when 2000 is requested),
+    and advancing by the requested size in that case would silently skip
+    records.
+    """
     results = []
     offset = 0
     while True:
@@ -52,7 +63,7 @@ def query_all_pages(base_url, params, extract):
             break
         results.extend(batch)
         print(f"  fetched {len(results)} so far...")
-        offset += PAGE_SIZE
+        offset += len(batch)
     return results
 
 
@@ -118,9 +129,30 @@ def fetch_lookup():
     print(f"  wrote {out}")
 
 
+def fetch_lsoa11_to_lsoa21_lookup():
+    print("\n== Fetching LSOA (2011) -> LSOA (2021) exact-fit lookup ==")
+    print("   (needed to join 2021-geography population-by-age data onto")
+    print("    the 2011-geography disease data used throughout this project)")
+    rows = query_all_pages(
+        LSOA11_TO_LSOA21_QUERY_URL,
+        {"where": "1=1", "outFields": "LSOA11CD,LSOA21CD,CHGIND", "f": "json"},
+        extract=lambda d: [f["attributes"] for f in d.get("features", [])],
+    )
+    print(f"  total rows: {len(rows)}")
+    STATIC.mkdir(parents=True, exist_ok=True)
+    out = STATIC / "lsoa11_to_lsoa21_lookup.csv"
+    with open(out, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["LSOA11CD", "LSOA21CD", "CHGIND"])
+        w.writeheader()
+        for r in rows:
+            w.writerow(r)
+    print(f"  wrote {out}")
+
+
 if __name__ == "__main__":
     raw_path = fetch_lsoa_boundaries()
     simplify_boundaries(raw_path)
     fetch_lookup()
-    print("\nDone. Both site/data/lsoa_2011.topojson and "
-          "data/static/lsoa_msoa_lad_lookup.csv have been regenerated.")
+    fetch_lsoa11_to_lsoa21_lookup()
+    print("\nDone. site/data/lsoa_2011.topojson, data/static/lsoa_msoa_lad_lookup.csv "
+          "and data/static/lsoa11_to_lsoa21_lookup.csv have all been regenerated.")

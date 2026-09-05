@@ -29,7 +29,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install pandas odfpy openpyxl
+        run: pip install pandas numpy odfpy openpyxl
 
       - name: Fetch latest raw data from all sources
         run: python3 scripts/fetch_raw.py
@@ -42,7 +42,7 @@ jobs:
         run: |
           git config user.name "lsoa-dashboard-data-bot"
           git config user.email "actions@github.com"
-          git add site/data/lsoa_data.json site/data/meta.json
+          git add site/data/lsoa_data.json site/data/meta.json site/data/trend_*.json
           if git diff --cached --quiet; then
             echo "No data changes detected."
             echo "changed=false" >> "$GITHUB_OUTPUT"

@@ -31,7 +31,27 @@ const INDICATOR_GROUPS = [
     blurb: "Each nation's own official deprivation indices. England (IMD2019) and Wales (WIMD2019) use different indicators and different scoring methods — do not compare a score of one nation directly against the other. The Wales \"overall\" score covers more than health (income, employment, education, housing etc. are also folded in) — the health domain score above is the health-specific one.",
     keys: ["imd_health_en", "wimd_health_wa", "wimd_overall_wa"],
   },
+  {
+    id: "population",
+    label: "Population context",
+    coverage: "England and Wales",
+    blurb: "Not a disease measure — shown so you can see for yourself how much of a disease pattern might simply track where older people live. This is also the covariate behind every \"age-adjusted\" view below.",
+    keys: ["pct65"],
+  },
 ];
+
+// Which analysis "views" exist, in the order offered to the user. Only the
+// ones listed in an indicator's meta.modes are actually shown for it.
+const VIEW_MODES = [
+  { id: "raw", label: "Raw rate", short: "Raw", scale: "sequential" },
+  { id: "pctile", label: "Percentile rank", short: "Percentile", scale: "sequential" },
+  { id: "yoy", label: "Year-on-year change", short: "YoY change", scale: "diverging" },
+  { id: "zscore", label: "Change vs. typical (z-score)", short: "Change z-score", scale: "diverging" },
+  { id: "ageadj", label: "Age-adjusted ratio", short: "Age-adjusted", scale: "diverging" },
+];
+
+// mode id -> the schema-key suffix that stores it (raw has none — it's the base key)
+const MODE_SUFFIX = { raw: "", pctile: "_pctile", yoy: "_yoy", zscore: "_z", ageadj: "_adj" };
 
 // Detailed citation for every field key that can appear in v{} for an LSOA,
 // keyed the same as meta.json's "indicators" object (meta.json supplies
@@ -56,6 +76,7 @@ const SOURCE_CITATIONS = {
   imd_health_en:{ dataset: "English Indices of Deprivation 2019 — Health Deprivation & Disability Domain", publisher: "Ministry of Housing, Communities & Local Government (MHCLG)", url: "https://www.gov.uk/government/statistics/english-indices-of-deprivation-2019" },
   wimd_health_wa:{ dataset: "Welsh Index of Multiple Deprivation 2019 — Health Domain score", publisher: "Welsh Government", url: "https://www.gov.wales/welsh-index-multiple-deprivation-full-index-update-ranks-2019" },
   wimd_overall_wa:{ dataset: "Welsh Index of Multiple Deprivation 2019 — Overall score", publisher: "Welsh Government", url: "https://www.gov.wales/welsh-index-multiple-deprivation-full-index-update-ranks-2019" },
+  pct65:        { dataset: "Population estimates for LSOAs by broad age band", publisher: "Office for National Statistics", url: "https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimatesnationalstatistics" },
 };
 
 const BOUNDARY_SOURCE = {
@@ -69,4 +90,11 @@ const LOOKUP_SOURCE = {
   dataset: "Output Area (2011) to LSOA to MSOA to LAD (December 2011) Exact Fit Lookup in EW",
   publisher: "Office for National Statistics",
   url: "https://geoportal.statistics.gov.uk/",
+};
+
+const LOOKUP21_SOURCE = {
+  dataset: "LSOA (2011) to LSOA (2021) to Local Authority District (2022) Exact Fit Lookup for EW",
+  publisher: "Office for National Statistics",
+  url: "https://geoportal.statistics.gov.uk/",
+  note: "The population-by-age data below is only published on 2021 LSOA geography. This lookup re-associates it back onto the 2011 LSOAs used everywhere else in this dashboard — about 97% of areas map 1:1 unchanged; the remainder (splits/merges) are approximated by averaging across the affected areas.",
 };

@@ -176,10 +176,40 @@ def fetch_wales_wimd():
 
 
 # ---------------------------------------------------------------------------
+# Population by broad age band, per LSOA (for age-profile adjustment) — ONS
+# ---------------------------------------------------------------------------
+FALLBACK_AGE_POP = (
+    "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/populationandmigration/"
+    "populationestimates/datasets/lowersuperoutputareamidyearpopulationestimatesnationalstatistics/"
+    "mid2011tomid2022/sapelsoabroadage20112022.xlsx"
+)
+
+
+def fetch_age_population():
+    print("\n== Population by broad age band, per LSOA (ONS) ==")
+    url = FALLBACK_AGE_POP
+    try:
+        html = get(
+            "https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/"
+            "populationestimates/datasets/lowersuperoutputareamidyearpopulationestimatesnationalstatistics/previous"
+        ).decode("utf-8", "ignore")
+        candidates = re.findall(r'href="(/file\?uri=[^"]*sapelsoabroadage[^"]*\.xlsx)"', html)
+        if candidates:
+            # first hit is the most recently published edition on that page
+            url = "https://www.ons.gov.uk" + candidates[0]
+            print(f"  confirmed current: {url}")
+    except Exception as e:
+        print(f"  [WARN] discovery failed ({e}), using known-good fallback")
+    data = get(url)
+    save(RAW / "age_pop" / "sapelsoabroadage.xlsx", data)
+
+
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     fetch_qof()
     fetch_prescribing()
     fetch_frailty()
     fetch_england_imd()
     fetch_wales_wimd()
+    fetch_age_population()
     print("\nDone. Run scripts/build_data.py next to rebuild site/data/*.json.")
