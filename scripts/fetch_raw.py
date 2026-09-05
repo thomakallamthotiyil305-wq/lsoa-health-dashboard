@@ -11,10 +11,13 @@ committed at site/data/lsoa_2011.topojson. Run fetch_boundaries.py manually
 if that ever needs regenerating.
 """
 import csv
+import http.client
 import io
 import json
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 import urllib.parse
 import zipfile
@@ -24,10 +27,27 @@ RAW = Path(__file__).resolve().parent.parent / "data" / "raw"
 UA = {"User-Agent": "Mozilla/5.0 (lsoa-health-dashboard data-refresh bot)"}
 
 
-def get(url, timeout=60):
-    req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+def get(url, timeout=120, retries=3):
+    """Fetch a URL, retrying with backoff on transient network failures.
+    Some of these source files are 30-40MB; a slow connection can trip the
+    socket timeout mid-read (IncompleteRead) well before the request itself
+    would be considered hung, so this is a real, expected failure mode in
+    CI, not just a hypothetical one — retry rather than aborting the whole
+    weekly refresh over one flaky download.
+    """
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            req = urllib.request.Request(url, headers=UA)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except (http.client.IncompleteRead, TimeoutError, ConnectionError, urllib.error.URLError) as e:
+            last_err = e
+            if attempt < retries:
+                wait = 5 * attempt
+                print(f"  [retry {attempt}/{retries}] {url} failed ({e}); waiting {wait}s")
+                time.sleep(wait)
+    raise last_err
 
 
 def get_json(url):
