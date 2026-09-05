@@ -28,6 +28,7 @@ const state = {
   featuresByCode: new Map(),
   layersByCode: new Map(),
   trendCache: {},
+  trendFailed: new Set(),
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -410,24 +411,39 @@ async function toggleTrend(btn) {
 
   btn.textContent = "⏳ Loading…";
   try {
-    const trend = await loadTrend(key);
-    const idx = Object.keys(trend.data).length ? trend.years : [];
+    // If a previous attempt for this indicator failed, force a fresh fetch
+    // rather than risk quietly replaying a bad cached/CDN-edge-cached
+    // response — retrying with a plain fetch() alone doesn't guarantee that.
+    const retry = state.trendFailed.has(key);
+    const trend = await loadTrend(key, retry);
+    state.trendFailed.delete(key);
     const values = trend.data[code] || [];
     slot.innerHTML = buildSparklineSVG(trend.years, values, state.meta.reform_years, state.meta.indicators[key].label);
     slot.dataset.open = "1";
     btn.textContent = "📈 Hide trend";
   } catch (e) {
     console.error(e);
-    slot.innerHTML = `<p class="nodata">Couldn't load trend data.</p>`;
+    state.trendFailed.add(key);
+    slot.innerHTML = `<p class="nodata">Couldn't load trend data — <button type="button" class="trend-retry-link" data-key="${key}" data-code="${code}">tap to retry</button>.</p>`;
+    slot.querySelector(".trend-retry-link")?.addEventListener("click", () => toggleTrend(btn));
     btn.textContent = "📈 Trend";
+    slot.dataset.open = "0";
   }
 }
 
-function loadTrend(key) {
-  if (state.trendCache[key]) return Promise.resolve(state.trendCache[key]);
-  return fetch(`data/trend_${key}.json`)
-    .then((r) => r.json())
-    .then((json) => { state.trendCache[key] = json; return json; });
+function loadTrend(key, forceRefresh) {
+  if (!forceRefresh && state.trendCache[key]) return Promise.resolve(state.trendCache[key]);
+  const url = forceRefresh ? `data/trend_${key}.json?retry=${Date.now()}` : `data/trend_${key}.json`;
+  return fetch(url, forceRefresh ? { cache: "reload" } : {})
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then((json) => {
+      if (!json || !json.years || !json.data) throw new Error("malformed trend payload");
+      state.trendCache[key] = json;
+      return json;
+    });
 }
 
 function fmtAxis(n) {
