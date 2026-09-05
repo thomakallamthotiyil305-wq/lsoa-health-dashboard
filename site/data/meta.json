@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-05T16:40:00+00:00",
+  "generated": "2026-09-05T17:29:05+00:00",
   "geography": "LSOA 2011 (England & Wales)",
   "reform_years": [
     {
@@ -921,63 +921,6 @@
     }
   },
   "indicators": {
-    "hf": {
-      "label": "Heart failure",
-      "group": "QOF conditions (England)",
-      "unit": "% of registered patients",
-      "source": "NHS QOF via PLDR (QOF_4_14)",
-      "coverage": "England (+ partial border areas)",
-      "year": "2024",
-      "n_lsoas": 32968,
-      "min": 0.056,
-      "max": 5.379,
-      "breaks": [
-        0.749,
-        0.966,
-        1.171,
-        1.422
-      ],
-      "modes": [
-        "raw",
-        "pctile",
-        "yoy",
-        "zscore",
-        "ageadj"
-      ],
-      "has_trend": true,
-      "breaks_yoy": [
-        1.44,
-        4.69,
-        7.83,
-        12.21
-      ],
-      "min_yoy": -37.79,
-      "max_yoy": 134.0,
-      "breaks_z": [
-        -0.604,
-        -0.323,
-        -0.013,
-        0.434
-      ],
-      "min_z": -9.788,
-      "max_z": 19.573,
-      "breaks_adj": [
-        0.723,
-        0.875,
-        1.032,
-        1.248
-      ],
-      "min_adj": 0.091,
-      "max_adj": 3.806,
-      "breaks_adj_pctile": [
-        20.0,
-        40.0,
-        60.0,
-        80.0
-      ],
-      "min_adj_pctile": 0.0,
-      "max_adj_pctile": 100.0
-    },
     "ckd": {
       "label": "Chronic kidney disease",
       "group": "QOF conditions (England)",
@@ -1020,12 +963,12 @@
       "max_z": 9.836,
       "breaks_adj": [
         0.733,
-        0.892,
-        1.047,
+        0.893,
+        1.046,
         1.247
       ],
       "min_adj": 0.062,
-      "max_adj": 3.333,
+      "max_adj": 3.207,
       "breaks_adj_pctile": [
         20.0,
         40.0,
@@ -1035,21 +978,21 @@
       "min_adj_pctile": 0.0,
       "max_adj_pctile": 100.0
     },
-    "clopidogrel": {
-      "label": "Clopidogrel",
+    "prasugrel": {
+      "label": "Prasugrel",
       "group": "Prescribing (England)",
       "unit": "items per 1,000 patients (rate)",
-      "source": "NHSBSA via PLDR (P_1_15)",
+      "source": "NHSBSA via PLDR (P_1_16)",
       "coverage": "England (+ partial border areas)",
       "year": "2025 Q4",
       "n_lsoas": 33679,
       "min": 0.0,
-      "max": 266.43,
+      "max": 8.08,
       "breaks": [
-        37.13,
-        46.62,
-        56.63,
-        70.55
+        0.13,
+        0.41,
+        0.8,
+        1.27
       ],
       "modes": [
         "raw",
@@ -1057,119 +1000,27 @@
       ],
       "has_trend": false
     },
-    "af": {
-      "label": "Atrial fibrillation",
-      "group": "QOF conditions (England)",
-      "unit": "% of registered patients",
-      "source": "NHS QOF via PLDR (QOF_4_07)",
-      "coverage": "England (+ partial border areas)",
-      "year": "2024",
-      "n_lsoas": 32968,
-      "min": 0.07,
-      "max": 6.673,
+    "imd_health_en": {
+      "label": "Health deprivation score (England)",
+      "group": "Deprivation",
+      "unit": "IMD2019 Health Domain score (higher = worse)",
+      "source": "MHCLG English Indices of Deprivation 2019",
+      "coverage": "England only",
+      "year": "2019",
+      "n_lsoas": 32844,
+      "min": -3.215,
+      "max": 3.547,
       "breaks": [
-        1.521,
-        2.108,
-        2.535,
-        2.973
+        -0.732,
+        -0.239,
+        0.195,
+        0.732
       ],
       "modes": [
         "raw",
-        "pctile",
-        "yoy",
-        "zscore",
-        "ageadj"
+        "pctile"
       ],
-      "has_trend": true,
-      "breaks_yoy": [
-        -0.19,
-        1.59,
-        3.02,
-        4.68
-      ],
-      "min_yoy": -43.84,
-      "max_yoy": 101.49,
-      "breaks_z": [
-        -0.717,
-        -0.31,
-        0.121,
-        0.666
-      ],
-      "min_z": -18.391,
-      "max_z": 18.4,
-      "breaks_adj": [
-        0.755,
-        0.929,
-        1.063,
-        1.22
-      ],
-      "min_adj": 0.079,
-      "max_adj": 3.888,
-      "breaks_adj_pctile": [
-        20.0,
-        40.0,
-        60.0,
-        80.0
-      ],
-      "min_adj_pctile": 0.0,
-      "max_adj_pctile": 100.0
-    },
-    "pad": {
-      "label": "Peripheral arterial disease",
-      "group": "QOF conditions (England)",
-      "unit": "% of registered patients",
-      "source": "NHS QOF via PLDR (QOF_4_16)",
-      "coverage": "England (+ partial border areas)",
-      "year": "2024",
-      "n_lsoas": 32968,
-      "min": 0.026,
-      "max": 4.311,
-      "breaks": [
-        0.377,
-        0.501,
-        0.629,
-        0.775
-      ],
-      "modes": [
-        "raw",
-        "pctile",
-        "yoy",
-        "zscore",
-        "ageadj"
-      ],
-      "has_trend": true,
-      "breaks_yoy": [
-        -5.38,
-        -2.79,
-        -0.58,
-        2.36
-      ],
-      "min_yoy": -80.58,
-      "max_yoy": 68.46,
-      "breaks_z": [
-        -0.454,
-        -0.133,
-        0.128,
-        0.465
-      ],
-      "min_z": -45.195,
-      "max_z": 13.768,
-      "breaks_adj": [
-        0.676,
-        0.852,
-        1.039,
-        1.308
-      ],
-      "min_adj": 0.07,
-      "max_adj": 4.917,
-      "breaks_adj_pctile": [
-        20.0,
-        40.0,
-        60.0,
-        80.0
-      ],
-      "min_adj_pctile": 0.0,
-      "max_adj_pctile": 100.0
+      "has_trend": false
     },
     "osteo": {
       "label": "Osteoporosis",
@@ -1212,13 +1063,13 @@
       "min_z": -3.128,
       "max_z": 11.528,
       "breaks_adj": [
-        0.413,
+        0.412,
         0.641,
-        0.956,
-        1.484
+        0.958,
+        1.485
       ],
-      "min_adj": 0.026,
-      "max_adj": 9.251,
+      "min_adj": 0.025,
+      "max_adj": 9.293,
       "breaks_adj_pctile": [
         20.0,
         40.0,
@@ -1228,21 +1079,21 @@
       "min_adj_pctile": 0.0,
       "max_adj_pctile": 100.0
     },
-    "imd_health_en": {
-      "label": "Health deprivation score (England)",
-      "group": "Deprivation",
-      "unit": "IMD2019 Health Domain score (higher = worse)",
-      "source": "MHCLG English Indices of Deprivation 2019",
-      "coverage": "England only",
-      "year": "2019",
-      "n_lsoas": 32844,
-      "min": -3.215,
-      "max": 3.547,
+    "anticoag": {
+      "label": "Anti-coagulants (all)",
+      "group": "Prescribing (England)",
+      "unit": "items per 1,000 patients (rate)",
+      "source": "NHSBSA via PLDR (P_1_11)",
+      "coverage": "England (+ partial border areas)",
+      "year": "2025 Q4",
+      "n_lsoas": 33679,
+      "min": 0.0,
+      "max": 472.88,
       "breaks": [
-        -0.732,
-        -0.239,
-        0.195,
-        0.732
+        71.23,
+        89.89,
+        109.03,
+        133.24
       ],
       "modes": [
         "raw",
@@ -1250,21 +1101,65 @@
       ],
       "has_trend": false
     },
-    "stroke": {
-      "label": "Stroke / TIA",
+    "clopidogrel": {
+      "label": "Clopidogrel",
+      "group": "Prescribing (England)",
+      "unit": "items per 1,000 patients (rate)",
+      "source": "NHSBSA via PLDR (P_1_15)",
+      "coverage": "England (+ partial border areas)",
+      "year": "2025 Q4",
+      "n_lsoas": 33679,
+      "min": 0.0,
+      "max": 266.43,
+      "breaks": [
+        37.13,
+        46.62,
+        56.63,
+        70.55
+      ],
+      "modes": [
+        "raw",
+        "pctile"
+      ],
+      "has_trend": false
+    },
+    "oac": {
+      "label": "Oral anticoagulants",
+      "group": "Prescribing (England)",
+      "unit": "items per 1,000 patients (rate)",
+      "source": "NHSBSA via PLDR (P_1_18)",
+      "coverage": "England (+ partial border areas)",
+      "year": "2025 Q4",
+      "n_lsoas": 33679,
+      "min": 0.0,
+      "max": 425.05,
+      "breaks": [
+        62.13,
+        78.69,
+        95.14,
+        117.31
+      ],
+      "modes": [
+        "raw",
+        "pctile"
+      ],
+      "has_trend": false
+    },
+    "hf": {
+      "label": "Heart failure",
       "group": "QOF conditions (England)",
       "unit": "% of registered patients",
-      "source": "NHS QOF via PLDR (QOF_4_10)",
+      "source": "NHS QOF via PLDR (QOF_4_14)",
       "coverage": "England (+ partial border areas)",
       "year": "2024",
       "n_lsoas": 32968,
-      "min": 0.082,
-      "max": 4.666,
+      "min": 0.056,
+      "max": 5.379,
       "breaks": [
-        1.388,
-        1.792,
-        2.103,
-        2.438
+        0.749,
+        0.966,
+        1.171,
+        1.422
       ],
       "modes": [
         "raw",
@@ -1275,29 +1170,29 @@
       ],
       "has_trend": true,
       "breaks_yoy": [
-        -1.41,
-        0.18,
-        1.5,
-        3.23
+        1.44,
+        4.69,
+        7.83,
+        12.21
       ],
-      "min_yoy": -48.55,
-      "max_yoy": 135.8,
+      "min_yoy": -37.79,
+      "max_yoy": 134.0,
       "breaks_z": [
-        -0.59,
-        -0.208,
-        0.125,
-        0.566
+        -0.604,
+        -0.323,
+        -0.013,
+        0.434
       ],
-      "min_z": -44.808,
-      "max_z": 15.703,
+      "min_z": -9.788,
+      "max_z": 19.573,
       "breaks_adj": [
-        0.785,
-        0.925,
-        1.048,
-        1.202
+        0.723,
+        0.876,
+        1.033,
+        1.249
       ],
-      "min_adj": 0.081,
-      "max_adj": 2.995,
+      "min_adj": 0.091,
+      "max_adj": 3.812,
       "breaks_adj_pctile": [
         20.0,
         40.0,
@@ -1306,46 +1201,6 @@
       ],
       "min_adj_pctile": 0.0,
       "max_adj_pctile": 100.0
-    },
-    "frailty": {
-      "label": "Moderate/severe frailty (65+)",
-      "group": "Frailty",
-      "unit": "% of population aged 65+",
-      "source": "Small Area Frailty Index via PLDR (MSOA level, shown per LSOA)",
-      "coverage": "England only",
-      "year": "2022",
-      "n_lsoas": 32844,
-      "min": 0.0,
-      "max": 58.97,
-      "breaks": [
-        27.67,
-        31.26,
-        34.52,
-        38.66
-      ],
-      "modes": [
-        "raw",
-        "pctile",
-        "yoy",
-        "zscore"
-      ],
-      "has_trend": true,
-      "breaks_yoy": [
-        -8.49,
-        -3.53,
-        0.75,
-        5.56
-      ],
-      "min_yoy": -43.83,
-      "max_yoy": 57.5,
-      "breaks_z": [
-        -0.789,
-        -0.216,
-        0.27,
-        0.781
-      ],
-      "min_z": -4.278,
-      "max_z": 5.511
     },
     "statins": {
       "label": "Statins prescribing",
@@ -1410,13 +1265,13 @@
       "min_z": -11.259,
       "max_z": 16.52,
       "breaks_adj": [
-        0.794,
-        0.925,
-        1.047,
+        0.795,
+        0.926,
+        1.048,
         1.2
       ],
       "min_adj": 0.073,
-      "max_adj": 2.477,
+      "max_adj": 2.491,
       "breaks_adj_pctile": [
         20.0,
         40.0,
@@ -1426,21 +1281,162 @@
       "min_adj_pctile": 0.0,
       "max_adj_pctile": 100.0
     },
-    "wimd_overall_wa": {
-      "label": "Overall deprivation score (Wales)",
+    "wimd_health_wa": {
+      "label": "Health domain score (Wales)",
       "group": "Deprivation",
-      "unit": "WIMD2019 overall score (higher = worse)",
+      "unit": "WIMD2019 Health Domain score (higher = worse)",
       "source": "Welsh Government, WIMD 2019",
       "coverage": "Wales only",
       "year": "2019",
       "n_lsoas": 1909,
-      "min": 0.461,
-      "max": 86.631,
+      "min": 0.012,
+      "max": 100.0,
       "breaks": [
-        8.942,
-        14.763,
-        21.454,
-        33.306
+        5.061,
+        11.559,
+        20.65,
+        35.902
+      ],
+      "modes": [
+        "raw",
+        "pctile"
+      ],
+      "has_trend": false
+    },
+    "ticagrelor": {
+      "label": "Ticagrelor",
+      "group": "Prescribing (England)",
+      "unit": "items per 1,000 patients (rate)",
+      "source": "NHSBSA via PLDR (P_1_17)",
+      "coverage": "England (+ partial border areas)",
+      "year": "2025 Q4",
+      "n_lsoas": 33679,
+      "min": 0.0,
+      "max": 13.76,
+      "breaks": [
+        0.84,
+        1.64,
+        2.5,
+        3.57
+      ],
+      "modes": [
+        "raw",
+        "pctile"
+      ],
+      "has_trend": false
+    },
+    "stroke": {
+      "label": "Stroke / TIA",
+      "group": "QOF conditions (England)",
+      "unit": "% of registered patients",
+      "source": "NHS QOF via PLDR (QOF_4_10)",
+      "coverage": "England (+ partial border areas)",
+      "year": "2024",
+      "n_lsoas": 32968,
+      "min": 0.082,
+      "max": 4.666,
+      "breaks": [
+        1.388,
+        1.792,
+        2.103,
+        2.438
+      ],
+      "modes": [
+        "raw",
+        "pctile",
+        "yoy",
+        "zscore",
+        "ageadj"
+      ],
+      "has_trend": true,
+      "breaks_yoy": [
+        -1.41,
+        0.18,
+        1.5,
+        3.23
+      ],
+      "min_yoy": -48.55,
+      "max_yoy": 135.8,
+      "breaks_z": [
+        -0.59,
+        -0.208,
+        0.125,
+        0.566
+      ],
+      "min_z": -44.808,
+      "max_z": 15.703,
+      "breaks_adj": [
+        0.785,
+        0.926,
+        1.05,
+        1.201
+      ],
+      "min_adj": 0.081,
+      "max_adj": 3.049,
+      "breaks_adj_pctile": [
+        20.0,
+        40.0,
+        60.0,
+        80.0
+      ],
+      "min_adj_pctile": 0.0,
+      "max_adj_pctile": 100.0
+    },
+    "frailty": {
+      "label": "Moderate/severe frailty (65+)",
+      "group": "Frailty",
+      "unit": "% of population aged 65+",
+      "source": "Small Area Frailty Index via PLDR (MSOA level, shown per LSOA)",
+      "coverage": "England only",
+      "year": "2022",
+      "n_lsoas": 32844,
+      "min": 0.0,
+      "max": 58.97,
+      "breaks": [
+        27.67,
+        31.26,
+        34.52,
+        38.66
+      ],
+      "modes": [
+        "raw",
+        "pctile",
+        "yoy",
+        "zscore"
+      ],
+      "has_trend": true,
+      "breaks_yoy": [
+        -8.49,
+        -3.53,
+        0.75,
+        5.56
+      ],
+      "min_yoy": -43.83,
+      "max_yoy": 57.5,
+      "breaks_z": [
+        -0.789,
+        -0.216,
+        0.27,
+        0.781
+      ],
+      "min_z": -4.278,
+      "max_z": 5.511
+    },
+    "pct65": {
+      "label": "Population aged 65+",
+      "group": "Population context",
+      "unit": "% of usual residents",
+      "source": "ONS mid-year LSOA population estimates by broad age band",
+      "coverage": "England & Wales",
+      "year": "n/a",
+      "n_lsoas": 34753,
+      "min": 0.07,
+      "max": 67.76,
+      "breaks": [
+        11.83,
+        16.79,
+        21.71,
+        27.43
       ],
       "modes": [
         "raw",
@@ -1490,12 +1486,12 @@
       "max_z": 12.549,
       "breaks_adj": [
         0.661,
-        0.846,
-        1.035,
+        0.845,
+        1.036,
         1.317
       ],
       "min_adj": 0.057,
-      "max_adj": 3.092,
+      "max_adj": 3.067,
       "breaks_adj_pctile": [
         20.0,
         40.0,
@@ -1505,43 +1501,21 @@
       "min_adj_pctile": 0.0,
       "max_adj_pctile": 100.0
     },
-    "ticagrelor": {
-      "label": "Ticagrelor",
-      "group": "Prescribing (England)",
-      "unit": "items per 1,000 patients (rate)",
-      "source": "NHSBSA via PLDR (P_1_17)",
-      "coverage": "England (+ partial border areas)",
-      "year": "2025 Q4",
-      "n_lsoas": 33679,
-      "min": 0.0,
-      "max": 13.76,
-      "breaks": [
-        0.84,
-        1.64,
-        2.5,
-        3.57
-      ],
-      "modes": [
-        "raw",
-        "pctile"
-      ],
-      "has_trend": false
-    },
-    "wimd_health_wa": {
-      "label": "Health domain score (Wales)",
+    "wimd_overall_wa": {
+      "label": "Overall deprivation score (Wales)",
       "group": "Deprivation",
-      "unit": "WIMD2019 Health Domain score (higher = worse)",
+      "unit": "WIMD2019 overall score (higher = worse)",
       "source": "Welsh Government, WIMD 2019",
       "coverage": "Wales only",
       "year": "2019",
       "n_lsoas": 1909,
-      "min": 0.012,
-      "max": 100.0,
+      "min": 0.461,
+      "max": 86.631,
       "breaks": [
-        5.061,
-        11.559,
-        20.65,
-        35.902
+        8.942,
+        14.763,
+        21.454,
+        33.306
       ],
       "modes": [
         "raw",
@@ -1549,93 +1523,119 @@
       ],
       "has_trend": false
     },
-    "pct65": {
-      "label": "Population aged 65+",
-      "group": "Population context",
-      "unit": "% of usual residents",
-      "source": "ONS mid-year LSOA population estimates by broad age band",
-      "coverage": "England & Wales",
-      "year": "n/a",
-      "n_lsoas": 34753,
-      "min": 0.08,
-      "max": 66.4,
-      "breaks": [
-        11.68,
-        16.58,
-        21.43,
-        26.92
-      ],
-      "modes": [
-        "raw",
-        "pctile"
-      ],
-      "has_trend": false
-    },
-    "prasugrel": {
-      "label": "Prasugrel",
-      "group": "Prescribing (England)",
-      "unit": "items per 1,000 patients (rate)",
-      "source": "NHSBSA via PLDR (P_1_16)",
+    "pad": {
+      "label": "Peripheral arterial disease",
+      "group": "QOF conditions (England)",
+      "unit": "% of registered patients",
+      "source": "NHS QOF via PLDR (QOF_4_16)",
       "coverage": "England (+ partial border areas)",
-      "year": "2025 Q4",
-      "n_lsoas": 33679,
-      "min": 0.0,
-      "max": 8.08,
+      "year": "2024",
+      "n_lsoas": 32968,
+      "min": 0.026,
+      "max": 4.311,
       "breaks": [
-        0.13,
-        0.41,
-        0.8,
-        1.27
+        0.377,
+        0.501,
+        0.629,
+        0.775
       ],
       "modes": [
         "raw",
-        "pctile"
+        "pctile",
+        "yoy",
+        "zscore",
+        "ageadj"
       ],
-      "has_trend": false
+      "has_trend": true,
+      "breaks_yoy": [
+        -5.38,
+        -2.79,
+        -0.58,
+        2.36
+      ],
+      "min_yoy": -80.58,
+      "max_yoy": 68.46,
+      "breaks_z": [
+        -0.454,
+        -0.133,
+        0.128,
+        0.465
+      ],
+      "min_z": -45.195,
+      "max_z": 13.768,
+      "breaks_adj": [
+        0.676,
+        0.852,
+        1.039,
+        1.309
+      ],
+      "min_adj": 0.069,
+      "max_adj": 5.004,
+      "breaks_adj_pctile": [
+        20.0,
+        40.0,
+        60.0,
+        80.0
+      ],
+      "min_adj_pctile": 0.0,
+      "max_adj_pctile": 100.0
     },
-    "oac": {
-      "label": "Oral anticoagulants",
-      "group": "Prescribing (England)",
-      "unit": "items per 1,000 patients (rate)",
-      "source": "NHSBSA via PLDR (P_1_18)",
+    "af": {
+      "label": "Atrial fibrillation",
+      "group": "QOF conditions (England)",
+      "unit": "% of registered patients",
+      "source": "NHS QOF via PLDR (QOF_4_07)",
       "coverage": "England (+ partial border areas)",
-      "year": "2025 Q4",
-      "n_lsoas": 33679,
-      "min": 0.0,
-      "max": 425.05,
+      "year": "2024",
+      "n_lsoas": 32968,
+      "min": 0.07,
+      "max": 6.673,
       "breaks": [
-        62.13,
-        78.69,
-        95.14,
-        117.31
+        1.521,
+        2.108,
+        2.535,
+        2.973
       ],
       "modes": [
         "raw",
-        "pctile"
+        "pctile",
+        "yoy",
+        "zscore",
+        "ageadj"
       ],
-      "has_trend": false
-    },
-    "anticoag": {
-      "label": "Anti-coagulants (all)",
-      "group": "Prescribing (England)",
-      "unit": "items per 1,000 patients (rate)",
-      "source": "NHSBSA via PLDR (P_1_11)",
-      "coverage": "England (+ partial border areas)",
-      "year": "2025 Q4",
-      "n_lsoas": 33679,
-      "min": 0.0,
-      "max": 472.88,
-      "breaks": [
-        71.23,
-        89.89,
-        109.03,
-        133.24
+      "has_trend": true,
+      "breaks_yoy": [
+        -0.19,
+        1.59,
+        3.02,
+        4.68
       ],
-      "modes": [
-        "raw",
-        "pctile"
+      "min_yoy": -43.84,
+      "max_yoy": 101.49,
+      "breaks_z": [
+        -0.717,
+        -0.31,
+        0.121,
+        0.666
       ],
-      "has_trend": false
+      "min_z": -18.391,
+      "max_z": 18.4,
+      "breaks_adj": [
+        0.757,
+        0.931,
+        1.064,
+        1.221
+      ],
+      "min_adj": 0.079,
+      "max_adj": 3.97,
+      "breaks_adj_pctile": [
+        20.0,
+        40.0,
+        60.0,
+        80.0
+      ],
+      "min_adj_pctile": 0.0,
+      "max_adj_pctile": 100.0
     }
   }
 }
