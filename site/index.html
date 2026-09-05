@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>%F0%9F%97%BA%EF%B8%8F</text></svg>">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="css/style.css?v=14">
+<link rel="stylesheet" href="css/style.css?v=15">
 </head>
 <body>
 
@@ -43,6 +43,10 @@
 
       <p class="sidebar-help">Select <strong>one indicator</strong> to shade the map. Click any area for its full profile.</p>
 
+      <div id="viewModeHolder" class="view-mode-holder"><!-- populated by JS --></div>
+
+      <div class="legend legend-sidebar" id="legend" aria-live="polite"><!-- populated by JS, always visible here regardless of map zoom/pan or panel state --></div>
+
       <div id="layerGroups"><!-- populated by JS --></div>
 
     </div>
@@ -50,10 +54,6 @@
 
   <main class="map-wrap">
     <div id="map"></div>
-
-    <div class="map-overlay-bl">
-      <div class="legend" id="legend" aria-live="polite"></div>
-    </div>
 
     <div class="map-loading" id="mapLoading">
       <div class="spinner" aria-hidden="true"></div>
@@ -83,7 +83,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
-<script src="js/sources.js?v=14"></script>
-<script src="js/app.js?v=14"></script>
+<script src="js/sources.js?v=15"></script>
+<script src="js/app.js?v=15"></script>
 </body>
 </html>
