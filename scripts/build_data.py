@@ -264,15 +264,16 @@ if year_files:
 # prescribing indicators, via TREND_KEYS.
 pct65 = {}   # latest year only -> {lsoa11: pct}, used by fit_age_adjustment()
 age_pop_path = RAW / "age_pop" / "sapelsoabroadage.xlsx"
+year_sheets = {}
 if age_pop_path.exists() and lsoa11_to_21:
     xl = pd.ExcelFile(age_pop_path)
     # Sheets are named e.g. "Mid-2022 LSOA 2021" — one per available year.
-    year_sheets = {}
     for s in xl.sheet_names:
         m = re.match(r"Mid-(\d{4}) LSOA", s)
         if m:
             year_sheets[int(m.group(1))] = s
 
+if year_sheets:
     pct65_ts = {}   # year (str) -> {lsoa11: pct}
     for year, sheet_name in sorted(year_sheets.items()):
         df = pd.read_excel(age_pop_path, sheet_name=sheet_name, header=3)
@@ -307,7 +308,8 @@ if age_pop_path.exists() and lsoa11_to_21:
           f"population estimates (2021 LSOA geography, matched via ONS exact-fit crosswalk); "
           f"{len(pct65_ts)} years of history retained ({min(year_sheets)}-{latest_pop_year})")
 else:
-    print("Age profile: source files missing, skipping age-adjustment features")
+    print("Age profile: source file missing or no year sheets matched the expected naming pattern, "
+          "skipping age-adjustment and pct65 features (rest of the build continues normally)")
 
 # ---------- 7b. Census 2011 vs 2021: self-reported general health ----------
 # A genuine two-time-point comparison, unlike the deprivation indices — both
@@ -623,7 +625,15 @@ all_keys = set(indicator_values.keys())
 
 # Base indicators (raw values) — everything else (_pctile, _yoy, _z, _adj) is
 # a derived suffix of one of these and inherits its label/group/etc.
-base_keys = [k for k in all_keys if not re.search(r"_(pctile|yoy|z|adj)$", k)]
+# Ordered via ALL_BASE_KEYS_ORDER (not raw set iteration) deliberately: a
+# plain `set` iterates in an order that depends on Python's per-process
+# string-hash randomization, which would silently reshuffle meta.json's
+# "indicators" key order on every single build — including scheduled runs
+# where nothing actually changed — defeating the "commit only if something
+# actually changed" guarantee the refresh workflow (and README) promise.
+base_keys = [k for k in ALL_BASE_KEYS_ORDER if k in all_keys] + sorted(
+    k for k in all_keys if k not in set(ALL_BASE_KEYS_ORDER) and not re.search(r"_(pctile|yoy|z|adj)$", k)
+)
 
 for key in base_keys:
     m = dict(INDICATOR_META.get(key, {"label": key, "group": "Other", "unit": "", "source": "", "coverage": ""}))
