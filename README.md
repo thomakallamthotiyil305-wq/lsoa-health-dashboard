@@ -104,6 +104,15 @@ and frailty, which have a genuine multi-year annual series — year-on-year
 module docstring for exact formulas, and the in-app "Data & methodology"
 glossary for plain-language explanations with worked examples.
 
+The same multi-year indicators also get a **reform-year impact** table
+(`compute_reform_impact()` in `build_data.py`, rendered in the "Data &
+methodology" modal): for each of the two NHS commissioning reform years,
+compares that specific year's national change *and* its cross-region
+standard deviation of change against what's typical for that indicator in
+other years — a computed answer to "did this reform coincide with regions
+moving unusually differently from each other," not just a visual
+impression from a trend line.
+
 ## Compare & Forecast
 
 A second modal (separate from "Data & methodology") holds two more things:
@@ -177,10 +186,18 @@ python3 -m http.server 8642 --directory site
   an interactive tool on the new StatsWales platform), a genuine data-access
   gap rather than a methodological choice.
 - The age-adjusted ratio is an indirect-standardisation-style approximation
-  (regression against local % 65+), not a true directly age-standardised
-  rate — neither QOF nor NHSBSA data publishes age-specific rates at LSOA
-  level, so a certified DSR isn't computable from this source. Stated
-  plainly in-app rather than overclaiming rigour.
+  (multiple regression against the local population share in every age
+  band the source data provides — 0-15, 16-29, 30-44, 45-64, 65+ — not
+  just a single % 65+ covariate), not a true directly age-standardised
+  rate. Neither QOF nor NHSBSA data publishes age-specific *rates* at LSOA
+  level, so a certified DSR isn't computable from this source; Health
+  Survey for England and the old APHO/PHE "expected prevalence" models
+  were both investigated and rejected as reference rates — the former is
+  self-reported survey diagnosis (a different measurement system than
+  QOF's GP-register counts), the latter appears to be discontinued
+  2008-2013-era modelling, too stale for 2024 registers. Stated plainly
+  in-app rather than overclaiming rigour; see `fit_age_adjustment()`'s
+  docstring for the full reasoning.
 - Frailty is MSOA-level data broadcast to member LSOAs, not LSOA-native.
 - Wales has no public LSOA-level clinical disease-register data at the time
   of writing; Wales uses WIMD2019 Health Domain instead (see methodology

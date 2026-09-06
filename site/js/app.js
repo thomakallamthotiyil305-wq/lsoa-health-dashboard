@@ -777,6 +777,37 @@ function buildAboutModal() {
     .map((key) => buildNationalTrendChart(key))
     .join("");
 
+  // Reform-impact table: for every indicator with a reform year nearby in
+  // its data, compares that year's national change AND its cross-region
+  // spread (SD of change across LSOAs) against what's typical for that
+  // same indicator — see compute_reform_impact() in build_data.py. A ratio
+  // above 1 means areas moved more differently from each other than usual
+  // that year; below 1 means the change was more uniform than usual.
+  const reformImpactRows = [];
+  for (const key in state.meta.reform_impact || {}) {
+    const m = state.meta.indicators[key];
+    if (!m) continue;
+    for (const year in state.meta.reform_impact[key]) {
+      reformImpactRows.push({ key, label: m.label, year: Number(year), ...state.meta.reform_impact[key][year] });
+    }
+  }
+  reformImpactRows.sort((a, b) => a.year - b.year || b.heterogeneity_ratio - a.heterogeneity_ratio);
+  const reformReading = (ratio) =>
+    ratio >= 1.5 ? "much more regionally uneven than usual"
+    : ratio >= 1.15 ? "somewhat more regionally uneven"
+    : ratio <= 0.67 ? "much more regionally uniform than usual"
+    : ratio <= 0.87 ? "somewhat more regionally uniform"
+    : "close to a typical year";
+  const reformImpactTableRows = reformImpactRows.map((r) => `
+    <tr>
+      <td>${r.label}</td>
+      <td>${r.year}</td>
+      <td>${r.mean_change_pct > 0 ? "+" : ""}${r.mean_change_pct}%</td>
+      <td>${r.heterogeneity_ratio}×</td>
+      <td>${reformReading(r.heterogeneity_ratio)}</td>
+    </tr>
+  `).join("");
+
   body.innerHTML = `
     <h2 id="aboutTitle">Data &amp; methodology</h2>
 
@@ -819,12 +850,20 @@ function buildAboutModal() {
     rates partly just shows "where older people live." To separate that mechanical effect from genuine clustering, this dashboard also shows population
     aged 65+ (its own map layer) and an <strong>age-adjusted ratio</strong> for the 8 QOF conditions and 6 prescribing indicators.</p>
     <p><strong>Important limitation:</strong> a fully rigorous directly age-standardised rate needs age-<em>specific</em> rates — e.g. a separate
-    prevalence or prescribing figure for ages 65–74, 75–84, 85+ — re-weighted onto a standard population. Neither NHS QOF nor NHSBSA prescribing data
-    publishes an age-specific breakdown at LSOA level. A true directly-standardised rate therefore cannot be computed from this source. What's shown
-    instead is an <strong>indirect-standardisation-style ratio</strong>: a simple regression of each condition's rate against local % aged 65+ across
-    every LSOA in England, then <code>ratio = observed rate ÷ rate that regression predicts for this area's age profile</code>. This controls for the
-    linear relationship between age and prevalence, but not the full age-specific structure a certified age-standardised rate would use — treat it as
-    a genuinely useful, transparent approximation, not an official age-standardised statistic.</p>
+    prevalence or prescribing figure for ages 65–74, 75–84, 85+, computed for each area — re-weighted onto a standard population. Neither NHS QOF nor
+    NHSBSA prescribing data publishes an age-specific breakdown at LSOA level, so a true directly-standardised rate cannot be computed from this
+    source. Two other routes were investigated and deliberately not used, because each would produce a number that <em>looks</em> like a certified
+    age-standardised rate without being one: Health Survey for England has genuinely age-specific prevalence for some conditions, but it's
+    self-reported survey diagnosis, not GP disease-register counts — a different measurement system than QOF; and the old APHO/PHE "expected
+    prevalence" models built for exactly this kind of comparison appear to be discontinued 2008–2013-era models, too stale to apply to current data.</p>
+    <p>What's shown instead is an <strong>indirect-standardisation-style ratio</strong>, using every local age band this data supports: a multiple
+    regression of each condition's rate against the local population share in four age bands (16–29, 30–44, 45–64, 65+; 0–15 is the implicit
+    reference category) across every LSOA in England, then <code>ratio = observed rate ÷ rate the regression predicts from this area's full age
+    profile</code>. This is an upgrade from an earlier version of this dashboard that used only % aged 65+ as a single covariate — using the complete
+    local age structure captures more of the real age-driven variation (R² improved for every single indicator when this was tested, e.g. atrial
+    fibrillation's rose from 0.53 to 0.56, statins prescribing's from 0.07 to 0.10) — but it's still a regression-based proxy, not age-specific
+    rates re-weighted onto a standard population. Treat it as a genuinely useful, transparent approximation, not an official age-standardised
+    statistic.</p>
 
     <h3>National trends over time, and NHS commissioning reforms</h3>
     <p>These charts show the England-wide average (and 10th–90th percentile spread) for each condition with a multi-year series, with vertical dashed
@@ -834,6 +873,24 @@ function buildAboutModal() {
     change every year too. Click "📈 Trend" next to any condition in an area's profile (after clicking that area on the map) to see that specific
     area's own trajectory rather than the national average.</p>
     <div class="national-trends-grid">${nationalTrendCharts}</div>
+
+    <h3>Reform-year impact: was the change unusual, and unusually uneven across regions?</h3>
+    <p>For every indicator with data near a reform year, this compares that specific year's national change — and, more importantly, how
+    <em>differently areas moved from each other</em> that year (the cross-region standard deviation of change) — against what's typical for that same
+    indicator in other years. A heterogeneity ratio above 1× means that year was more regionally uneven than usual for this indicator; below 1× means
+    it was more uniform than usual. This is exactly the kind of comparison a commissioner might use to ask "did this reform coincide with some regions
+    pulling away from others?" — a computed answer, not a visual impression from a chart.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Indicator</th><th>Reform year</th><th>National mean change</th><th>Regional heterogeneity</th><th>Reading</th></tr></thead>
+        <tbody>${reformImpactTableRows}</tbody>
+      </table>
+    </div>
+    <p class="modal-lede" style="margin-top:10px;"><strong>Read this as descriptive, not causal.</strong> A high heterogeneity ratio says regions
+    moved unusually differently from each other that year — it does not by itself say the reform caused that, since other things (weather, local
+    outbreaks, coding changes, staffing) also vary year to year. Atrial fibrillation's 2013 ratio (2.13×) is the most striking figure in this table —
+    worth a specific look if you're investigating that reform's regional effects — but treat every row as a lead worth investigating, not a proven
+    effect.</p>
 
     <h3>Why some data only covers England</h3>
     <p>QOF disease-prevalence indicators, NHS prescribing indicators, and the Small Area Frailty Index are all sourced from NHS England / NHS Business

@@ -273,6 +273,12 @@ if year_files:
 # the same trend/year-on-year-change/z-score treatment as the disease and
 # prescribing indicators, via TREND_KEYS.
 pct65 = {}   # latest year only -> {lsoa11: pct}, used by fit_age_adjustment()
+# Full local age structure, latest year only -> {lsoa11: {band: pct}}. The
+# source file actually publishes 5 broad bands per sex (0-15, 16-29, 30-44,
+# 45-64, 65+) — used below to fit the age-adjustment ratio against the
+# *entire* local age profile, not just the over-65 share.
+AGE_BANDS = ["0_15", "16_29", "30_44", "45_64", "65_plus"]
+age_structure = {}
 age_pop_path = RAW / "age_pop" / "sapelsoabroadage.xlsx"
 year_sheets = {}
 if age_pop_path.exists() and lsoa11_to_21:
@@ -285,18 +291,30 @@ if age_pop_path.exists() and lsoa11_to_21:
 
 if year_sheets:
     pct65_ts = {}   # year (str) -> {lsoa11: pct}
+    latest_pop_year = max(year_sheets)
     for year, sheet_name in sorted(year_sheets.items()):
         df = pd.read_excel(age_pop_path, sheet_name=sheet_name, header=3)
-        col_65 = [c for c in df.columns if "65" in str(c)]
+        band_cols = {
+            "0_15": [c for c in df.columns if "0 to 15" in str(c)],
+            "16_29": [c for c in df.columns if "16 to 29" in str(c)],
+            "30_44": [c for c in df.columns if "30 to 44" in str(c)],
+            "45_64": [c for c in df.columns if "45 to 64" in str(c)],
+            "65_plus": [c for c in df.columns if "65" in str(c)],
+        }
         total_col = "Total"
         lsoa21_col = next(c for c in df.columns if "LSOA" in str(c) and "Code" in str(c))
         pct65_by_lsoa21 = {}
+        structure_by_lsoa21 = {}
         for _, row in df.iterrows():
             total = row[total_col]
             if not total:
                 continue
-            p65 = sum(row[c] for c in col_65)
+            p65 = sum(row[c] for c in band_cols["65_plus"])
             pct65_by_lsoa21[row[lsoa21_col]] = p65 / total * 100
+            if year == latest_pop_year:
+                structure_by_lsoa21[row[lsoa21_col]] = {
+                    band: sum(row[c] for c in cols) / total * 100 for band, cols in band_cols.items()
+                }
 
         year_vals = {}
         for lsoa11, lsoa21_list in lsoa11_to_21.items():
@@ -305,7 +323,12 @@ if year_sheets:
                 year_vals[lsoa11] = sum(vals) / len(vals)
         pct65_ts[str(year)] = year_vals
 
-    latest_pop_year = max(year_sheets)
+        if year == latest_pop_year:
+            for lsoa11, lsoa21_list in lsoa11_to_21.items():
+                rows = [structure_by_lsoa21[c] for c in lsoa21_list if c in structure_by_lsoa21]
+                if rows:
+                    age_structure[lsoa11] = {band: sum(r[band] for r in rows) / len(rows) for band in AGE_BANDS}
+
     pct65 = pct65_ts[str(latest_pop_year)]
     time_series["pct65"] = pct65_ts
     detected_years["pct65"] = str(latest_pop_year)
@@ -401,32 +424,54 @@ def fit_age_adjustment(key):
     """
     Indirect-standardisation-style adjustment, NOT a true directly age-
     standardised rate. A true DSR needs age-*specific* prevalence (e.g. a
-    separate rate for 65-74, 75-84, 85+) re-weighted onto a standard
-    population's age structure. Both QOF disease-prevalence and NHSBSA
-    prescribing data are only published as a single all-ages rate per
-    LSOA — no age-specific numerator exists at this geography for either —
-    so a real DSR cannot be computed from this source.
+    separate rate for 65-74, 75-84, 85+) computed FOR EACH LSOA, re-weighted
+    onto a standard population's age structure. Both QOF disease-prevalence
+    and NHSBSA prescribing data are only published as a single all-ages
+    rate per LSOA — no age-specific numerator exists at this geography for
+    either — so a real DSR cannot be computed from this source.
 
-    What this computes instead: fit rate ~ pct65 as a simple linear
-    regression across every LSOA with data, then for each LSOA:
-        adjusted_ratio = observed_rate / rate_predicted_from_its_own_pct65
-    A ratio of 1.0 means "exactly what you'd expect given how old the local
-    population is"; above 1.0 means higher than that area's age profile
-    alone would predict; below 1.0 means lower. This is the same logic as
-    an indirect-standardisation / SMR-style ratio, and is a reasonable,
-    transparent proxy — but it only controls for the *linear* association
-    between one covariate (% 65+) and the rate, not the full age-specific
-    structure a proper DSR would use. Documented plainly in the About panel
-    so this is never mistaken for a certified age-standardised rate.
+    Two other routes were investigated and deliberately rejected rather
+    than silently used, because each would produce a number that *looks*
+    like a certified age-standardised rate without actually being one:
+      - Health Survey for England publishes genuinely age-specific
+        prevalence for some conditions, but it's self-reported survey
+        diagnosis, not GP disease-register counts — a different
+        measurement system than QOF, not a compatible reference rate.
+      - APHO/PHE's old "expected prevalence" models were built for
+        exactly this kind of comparison, but appear to be discontinued
+        2008-2013-era models — using decade-plus-stale age-specific rates
+        against 2024 registers would itself be a validity problem.
+
+    What this computes instead: multiple linear regression of
+    rate ~ every local age band (0-15 held out as the reference category,
+    since all bands are shares of the same 100% and including it too would
+    be perfectly collinear with the intercept), fit once across every LSOA
+    with data, then for each LSOA:
+        adjusted_ratio = observed_rate / rate_predicted_from_its_own_age_structure
+    A ratio of 1.0 means "exactly what you'd expect given this area's full
+    age profile"; above 1.0 means higher than age structure alone would
+    predict; below 1.0 means lower. This is the same logic as an indirect-
+    standardisation / SMR-style ratio, upgraded from an earlier version of
+    this function that used only % 65+ as a single covariate — using the
+    complete local age structure (all 5 bands) captures more of the real
+    age-driven variation than one crude cutoff did, though it's still a
+    regression-based proxy, not age-specific rates re-weighted onto a
+    standard population. Documented plainly in the About panel so this is
+    never mistaken for a certified age-standardised rate.
     """
-    pairs = [(code, rec["v"][key]) for code, rec in records.items() if key in rec.get("v", {}) and code in pct65]
+    pairs = [(code, rec["v"][key]) for code, rec in records.items() if key in rec.get("v", {}) and code in age_structure]
     if len(pairs) < 30:
         return
     codes = [p[0] for p in pairs]
     y = np.array([p[1] for p in pairs])
-    x = np.array([pct65[c] for c in codes])
-    slope, intercept = np.polyfit(x, y, 1)
-    predicted = intercept + slope * x
+    # 0-15 is the implicit reference band (held out to avoid the perfect
+    # collinearity of including all 5 shares of 100% alongside an intercept).
+    covariate_bands = [b for b in AGE_BANDS if b != "0_15"]
+    X = np.column_stack(
+        [np.ones(len(codes))] + [np.array([age_structure[c][b] for c in codes]) for b in covariate_bands]
+    )
+    coefs, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+    predicted = X @ coefs
     predicted = np.where(predicted <= 0, np.nan, predicted)
     ratio = y / predicted
     r2 = 1 - np.nansum((y - predicted) ** 2) / np.sum((y - y.mean()) ** 2)
@@ -437,7 +482,7 @@ def fit_age_adjustment(key):
             records[code].setdefault("v", {})[f"{key}_adj"] = round(float(r), 3)
             n_applied += 1
     print(f"  {key}: age-adjusted ratio for {n_applied} LSOAs "
-          f"(slope={slope:.4f}, R²={r2:.3f} — % 65+ explains {r2*100:.0f}% of cross-LSOA variance)")
+          f"(R²={r2:.3f} — full local age structure explains {r2*100:.0f}% of cross-LSOA variance)")
 
 
 def national_trend(key):
@@ -465,6 +510,66 @@ def national_trend(key):
     return out
 
 
+def compute_reform_impact(key):
+    """
+    Extends the single latest-year-pair YoY/z-score logic (add_change_stats)
+    to *every* consecutive year pair in this indicator's history, so a
+    reform year's transition can be compared against what's typical for
+    this indicator rather than looked at in isolation. For each
+    transition (t0 -> t1), computes the cross-LSOA mean % change and the
+    cross-LSOA SD of that change (the same "how unusual is this movement"
+    quantity add_change_stats uses for its z-score, just computed for
+    every year rather than only the most recent one) — this SD is exactly
+    the "regional heterogeneity" the reform-impact comparison needs: a
+    high SD means areas moved very differently from each other that year;
+    a low SD means the change was broadly uniform across England.
+    For each reform year, compares the transition ending closest to that
+    year against the average of every *other* transition for the same
+    indicator, giving a direct, computed answer to "was the year this
+    reform took effect unusually volatile, and unusually regionally
+    uneven, compared to this condition's normal year-to-year movement?"
+    """
+    if key not in time_series:
+        return None
+    years = sorted(time_series[key].keys(), key=lambda y: int(y))
+    if len(years) < 3:
+        return None
+
+    transitions = []   # list of (end_year:int, mean_change, sd_change)
+    for t0, t1 in zip(years[:-1], years[1:]):
+        v0, v1 = time_series[key][t0], time_series[key][t1]
+        common = [c for c in v1 if c in v0 and v0[c] != 0]
+        if len(common) < 30:
+            continue
+        pct_changes = np.array([(v1[c] - v0[c]) / v0[c] * 100 for c in common])
+        transitions.append((int(t1), float(pct_changes.mean()), float(pct_changes.std())))
+
+    if len(transitions) < 2:
+        return None
+
+    out = {}
+    for reform in REFORM_YEARS:
+        r_year = reform["year"]
+        # the transition whose end-year is closest to this reform
+        closest = min(transitions, key=lambda t: abs(t[0] - r_year))
+        if abs(closest[0] - r_year) > 2:
+            continue   # no data anywhere near this reform for this indicator
+        others = [t for t in transitions if t is not closest]
+        if not others:
+            continue
+        baseline_sd = float(np.mean([t[2] for t in others]))
+        if baseline_sd <= 0:
+            continue
+        out[str(r_year)] = {
+            "transition_end_year": closest[0],
+            "mean_change_pct": round(closest[1], 3),
+            "sd_change_pct": round(closest[2], 3),
+            "baseline_sd_change_pct": round(baseline_sd, 3),
+            "heterogeneity_ratio": round(closest[2] / baseline_sd, 2),
+        }
+    return out or None
+
+
 print("\nComputing derived statistics...")
 for key in QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "imd_health_en", "imd_health_en_2019", "imd_health_en_change", "wimd_health_wa", "wimd_overall_wa", "pct65"] + CENSUS_KEYS:
     add_percentiles(key)
@@ -473,7 +578,7 @@ print("Year-on-year change + z-score of change (QOF conditions, prescribing, fra
 for key in TREND_KEYS:
     add_change_stats(key)
 
-if pct65:
+if age_structure:
     print("Age-profile-adjusted ratio (QOF conditions + prescribing):")
     for key in AGE_ADJUSTABLE_KEYS:
         fit_age_adjustment(key)
@@ -487,6 +592,16 @@ for key in TREND_KEYS:
     if nt:
         national_trends[key] = nt
         print(f"  {key}: {len(nt['years'])} years, latest mean={nt['mean'][-1]}")
+
+print("Reform-year impact (regional heterogeneity of change vs. this indicator's typical year):")
+reform_impact = {}
+for key in TREND_KEYS:
+    ri = compute_reform_impact(key)
+    if ri:
+        reform_impact[key] = ri
+        for year, r in ri.items():
+            print(f"  {key} @ {year}: heterogeneity ratio {r['heterogeneity_ratio']}x typical "
+                  f"(mean change {r['mean_change_pct']:+.2f}%, SD {r['sd_change_pct']:.2f} vs baseline SD {r['baseline_sd_change_pct']:.2f})")
 
 # ---------- 11. Clean up, then pack into a compact array format ----------
 # A plain {"chd": 3.2, "chd_pctile": 62.4, ...} object per LSOA repeats every
@@ -628,6 +743,7 @@ meta = {
     "schema": schema,
     "national_trends": national_trends,
     "national_comparisons": national_comparisons,
+    "reform_impact": reform_impact,
     "indicators": {}
 }
 
