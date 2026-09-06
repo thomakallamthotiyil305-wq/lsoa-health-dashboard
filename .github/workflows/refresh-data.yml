@@ -42,7 +42,11 @@ jobs:
         run: |
           git config user.name "lsoa-dashboard-data-bot"
           git config user.email "actions@github.com"
-          git add site/data/lsoa_data.json site/data/meta.json site/data/trend_*.json
+          git add site/data/lsoa_core.json site/data/lsoa_ind_*.json site/data/meta.json site/data/trend_*.json
+          # Stage the removal of the old monolithic file this replaced (see
+          # build_data.py's "remove a stale monolithic file" step); harmless
+          # no-op once it's fully gone from the repo in a future run.
+          git rm --cached --ignore-unmatch site/data/lsoa_data.json > /dev/null
           if git diff --cached --quiet; then
             echo "No data changes detected."
             echo "changed=false" >> "$GITHUB_OUTPUT"

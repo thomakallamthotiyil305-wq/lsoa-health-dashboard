@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
 """
 Joins all downloaded source data into:
-  site/data/lsoa_data.json   — per-LSOA snapshot: raw values + derived stats
-  site/data/meta.json        — indicator definitions, units, sources, breaks
-  site/data/trend_<key>.json — full historical time series, one file per
-                               indicator that has one, fetched lazily by the
-                               frontend only when a user asks for a trend view
+  site/data/lsoa_core.json     — name/LA/country for every LSOA, always
+                                 loaded first (no indicator values)
+  site/data/lsoa_ind_<key>.json — one file per indicator: that indicator's
+                                 raw value + every derived stat, for every
+                                 LSOA. The frontend loads the default
+                                 indicator's file up front and every other
+                                 one in the background right after, so the
+                                 map is interactive without waiting on the
+                                 full dataset — see mergeIndicatorFile() in
+                                 app.js.
+  site/data/meta.json          — indicator definitions, units, sources, breaks
+  site/data/trend_<key>.json   — full historical time series, one file per
+                                 indicator that has one, fetched lazily by
+                                 the frontend only when a user asks for a
+                                 trend view
 
 Fully dynamic: every "latest year / latest quarter" is auto-detected from
 whatever files fetch_raw.py most recently downloaded — nothing here is
@@ -543,16 +553,48 @@ schema = [
 ]
 schema_index = {key: i for i, key in enumerate(schema)}
 
-packed = {}
-for code, rec in final.items():
-    arr = [None] * len(schema)
-    for k, v in rec["v"].items():
-        arr[schema_index[k]] = v
-    packed[code] = {"n": rec["n"], "la": rec["la"], "c": rec["c"], "v": arr}
+# ---------- 11c. Split output: a tiny "core" file + one lazy-loaded file per indicator ----------
+# A single lsoa_data.json with the full 84-field schema for all 34,753 LSOAs
+# was ~18MB (~6.3MB gzipped) — every byte of that had to download and parse
+# before the map could show anything, even though rendering the *default*
+# view only ever needs one indicator's values. Splitting mirrors the
+# trend_<key>.json pattern already used for per-indicator history: a small
+# core file (name/LA/country — needed immediately for search, tooltips, the
+# detail panel header) loads first, then each indicator's own field values
+# load as a separate small file, fetched in parallel in the background so
+# the map is interactive almost immediately instead of blocking on the
+# entire dataset. See app.js's boot sequence and mergeIndicatorFile().
+core = {code: {"n": rec["n"], "la": rec["la"], "c": rec["c"]} for code, rec in final.items()}
+with open(OUT / "lsoa_core.json", "w") as f:
+    json.dump(core, f, separators=(",", ":"))
+print(f"Wrote lsoa_core.json ({(OUT/'lsoa_core.json').stat().st_size/1e6:.1f} MB, {len(core)} LSOAs, name/LA/country only)")
 
-with open(OUT / "lsoa_data.json", "w") as f:
-    json.dump(packed, f, separators=(",", ":"))
-print(f"Wrote lsoa_data.json ({(OUT/'lsoa_data.json').stat().st_size/1e6:.1f} MB, {len(schema)}-field schema)")
+fields_by_base = {
+    base: [f"{base}{suf}" for suf in SUFFIXES_ORDER if f"{base}{suf}" in indicator_values]
+    for base in ALL_BASE_KEYS_ORDER
+}
+for base, fields in fields_by_base.items():
+    if not fields:
+        continue
+    data = {}
+    for code, rec in final.items():
+        vals = [rec["v"].get(f) for f in fields]
+        if any(v is not None for v in vals):
+            data[code] = vals
+    if not data:
+        continue
+    ind_path = OUT / f"lsoa_ind_{base}.json"
+    with open(ind_path, "w") as f:
+        json.dump({"fields": fields, "data": data}, f, separators=(",", ":"))
+    print(f"Wrote {ind_path.name} ({ind_path.stat().st_size/1e6:.2f} MB, {len(data)} LSOAs x {len(fields)} fields)")
+
+# Remove a stale monolithic file from before this split, if present, so a
+# local/manual rebuild doesn't leave a large orphaned file that nothing
+# references anymore.
+stale = OUT / "lsoa_data.json"
+if stale.exists():
+    stale.unlink()
+    print("Removed stale lsoa_data.json (superseded by lsoa_core.json + lsoa_ind_*.json)")
 
 # ---------- 12. Write lazy-loaded trend files (one per indicator with history) ----------
 for key in TREND_KEYS:

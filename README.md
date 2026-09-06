@@ -43,14 +43,27 @@ structure, that one step might need a URL bump (everything else needs none).
   the only folder published to GitHub Pages / Render.
 - `scripts/fetch_raw.py` — downloads/refreshes everything in `data/raw/`,
   auto-discovering the latest period per source (see above).
-- `scripts/build_data.py` — joins `data/raw/` into `site/data/lsoa_data.json`
-  (per-LSOA indicator values, packed into a compact schema-indexed array —
-  see the file's own header comment) and `site/data/meta.json` (indicator
-  definitions, units, sources, auto-detected years, quintile breaks, national
-  year-by-year aggregates, and a `generated` build timestamp shown in-app).
-  Also writes `site/data/trend_<key>.json` — one lazy-loaded file per
-  indicator with a multi-year history, fetched only when a user opens that
-  indicator's trend view (not part of the main payload).
+- `scripts/build_data.py` — joins `data/raw/` into `site/data/meta.json`
+  (indicator definitions, units, sources, auto-detected years, quintile
+  breaks, national year-by-year aggregates, and a `generated` build
+  timestamp shown in-app) plus a split set of per-LSOA data files, sized so
+  the map is interactive almost immediately instead of blocking on the
+  full dataset:
+  - `site/data/lsoa_core.json` — name/LA/country for every LSOA. Always
+    loaded first; needed immediately for search, hover tooltips, and the
+    detail panel header.
+  - `site/data/lsoa_ind_<key>.json` — one file per indicator, holding just
+    that indicator's own values (raw + every derived stat) packed into a
+    compact array (see the file's own header comment on the schema). The
+    *default* indicator's file loads as part of the initial page load;
+    every other indicator's file loads in the background right after,
+    merged in as each arrives. Switching to an indicator before its file
+    has landed, or opening an area's full profile before every indicator
+    has, both self-correct within a second or two rather than showing
+    wrong data — see `mergeIndicatorFile()` / `showDetail()` in `app.js`.
+  - `site/data/trend_<key>.json` — one lazy-loaded file per indicator with
+    a multi-year history, fetched only when a user opens that indicator's
+    trend view (not part of either wave above).
 - `scripts/fetch_census.py` — **one-off**, like `fetch_boundaries.py`: pulls
   self-reported general health from the 2011 and 2021 Censuses (Nomis API),
   the one genuine two-time-point comparison in this dashboard. Not run on a
@@ -126,7 +139,7 @@ A second modal (separate from "Data & methodology") holds two more things:
 ```bash
 pip install pandas odfpy openpyxl
 python3 scripts/fetch_raw.py    # downloads/refreshes data/raw/
-python3 scripts/build_data.py   # rebuilds site/data/lsoa_data.json + meta.json
+python3 scripts/build_data.py   # rebuilds site/data/lsoa_core.json + lsoa_ind_*.json + meta.json
 ```
 
 Boundaries are a one-off, separate script — 2011 LSOA geography is
@@ -175,4 +188,8 @@ python3 -m http.server 8642 --directory site
 - The trend forecast is a naive linear extrapolation, explicitly labelled as
   such — it cannot anticipate future reforms, funding changes, or shocks.
 - Boundaries are geometry-simplified for web performance, not for spatial
-  analysis.
+  analysis. The boundaries file itself (~2.1MB gzipped) still loads in full
+  up front — splitting *that* would mean tiling the topology, a bigger
+  change than splitting the indicator data was; per-indicator loading (see
+  above) addresses the part of the initial payload that was actually
+  avoidable without that.

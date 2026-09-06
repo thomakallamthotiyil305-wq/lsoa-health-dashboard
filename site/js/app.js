@@ -29,6 +29,12 @@ const state = {
   layersByCode: new Map(),
   trendCache: {},
   trendFailed: new Set(),
+  loadedIndicators: new Set(),
+  allLoaded: false,
+  allLoadedPromise: null,
+  aboutBuilt: false,
+  forecastBuilt: false,
+  activeDetailCode: null,
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -49,14 +55,42 @@ function getVal(rec, baseKey, mode) {
 }
 
 // ---------- Boot ----------
+// Data loads in two waves. Wave 1 (blocking the loading spinner) is just
+// enough to make the map interactive: names/LA/country for every LSOA,
+// the boundaries, and the *default* indicator's values. Wave 2 (fired
+// immediately after, non-blocking) fetches every other indicator's file
+// in the background and merges each in as it arrives — the full per-LSOA
+// "click any area" profile and the Compare & Forecast live calculations
+// both need wave 2 to finish, but the map itself doesn't wait for it.
+// This exists because the old single lsoa_data.json (every field for
+// every LSOA) was ~6.3MB gzipped and had to fully download+parse before
+// anything was visible; splitting by indicator mirrors the trend_<key>.json
+// pattern already used elsewhere in this app for exactly this reason.
+function mergeIndicatorFile(baseKey, payload) {
+  const fieldIdx = payload.fields.map((f) => state.schemaIndex[f]);
+  for (const code in payload.data) {
+    const rec = state.data[code];
+    if (!rec) continue;
+    const vals = payload.data[code];
+    fieldIdx.forEach((idx, i) => { if (idx !== undefined) rec.v[idx] = vals[i]; });
+  }
+  state.loadedIndicators.add(baseKey);
+}
+
 Promise.all([
   fetch("data/meta.json").then((r) => r.json()),
-  fetch("data/lsoa_data.json").then((r) => r.json()),
+  fetch("data/lsoa_core.json").then((r) => r.json()),
   fetch("data/lsoa_2011.topojson").then((r) => r.json()),
-]).then(([meta, data, topo]) => {
+  fetch(`data/lsoa_ind_${state.activeKey}.json`).then((r) => r.json()),
+]).then(([meta, core, topo, firstIndicator]) => {
   state.meta = meta;
-  state.data = data;
   (meta.schema || []).forEach((key, i) => { state.schemaIndex[key] = i; });
+
+  state.data = {};
+  for (const code in core) {
+    state.data[code] = { n: core[code].n, la: core[code].la, c: core[code].c, v: new Array(state.meta.schema.length).fill(null) };
+  }
+  mergeIndicatorFile(state.activeKey, firstIndicator);
 
   const objectName = Object.keys(topo.objects)[0];
   const geojson = topojson.feature(topo, topo.objects[objectName]);
@@ -65,8 +99,6 @@ Promise.all([
   buildMap(geojson);
   buildLegend();
   buildHowToRead();
-  buildAboutModal();
-  buildForecastModal();
   wireGlobalControls();
 
   if (meta.generated) {
@@ -76,6 +108,24 @@ Promise.all([
   }
 
   $("#mapLoading").style.display = "none";
+
+  // Wave 2: every other indicator, in the background. Each one self-heals
+  // the map the instant it lands if it happens to be the one currently
+  // selected (covers the edge case of switching indicators before this
+  // finishes); the full allLoadedPromise below is what the detail panel's
+  // "full profile" view and the Compare & Forecast modal wait on.
+  const remainingKeys = Object.keys(meta.indicators).filter((k) => k !== state.activeKey);
+  state.allLoadedPromise = Promise.all(
+    remainingKeys.map((key) =>
+      fetch(`data/lsoa_ind_${key}.json`)
+        .then((r) => r.json())
+        .then((payload) => {
+          mergeIndicatorFile(key, payload);
+          if (key === state.activeKey) { restyleAll(); buildLegend(); }
+        })
+        .catch((err) => console.error(`Background load of indicator "${key}" failed:`, err))
+    )
+  ).then(() => { state.allLoaded = true; });
 }).catch((err) => {
   console.error(err);
   $("#mapLoading").innerHTML = "<p>⚠️ Failed to load data. Check the browser console.</p>";
@@ -372,6 +422,12 @@ function buildLegend() {
   });
   html += `<div class="legend-row"><span class="swatch" style="background:${NO_DATA_COLOR}"></span>No data</div>`;
   html += `<div class="legend-meta">${m.coverage} · ${m.year} · ${m.n_lsoas.toLocaleString()} areas</div>`;
+  // Every indicator's values load in the background right after the map
+  // first appears (see the boot sequence) — this only shows if someone
+  // switches to one that hasn't landed yet, in the first second or two.
+  if (!state.loadedIndicators.has(state.activeKey)) {
+    html += `<div class="legend-meta">⏳ Loading this indicator's data…</div>`;
+  }
   el.innerHTML = html;
 }
 
@@ -394,13 +450,29 @@ function formatStat(v, suffix) {
     : String(v);
 }
 
-function showDetail(code) {
+async function showDetail(code) {
   const rec = state.data[code];
   if (!rec) return;
   $("#detailEmpty").hidden = true;
   const el = $("#detailContent");
   el.hidden = false;
   $("#detailPanel").classList.add("open");
+
+  // The full profile below reads every indicator, but only the map's own
+  // active indicator is guaranteed loaded this early (see the boot
+  // sequence) — without this wait, an area clicked in the first second or
+  // two would wrongly show "No data" for everything still in flight rather
+  // than what's actually true (data on its way). In practice this resolves
+  // near-instantly; it only visibly waits on a very fast click or a very
+  // slow connection.
+  state.activeDetailCode = code;
+  if (!state.allLoaded) {
+    el.innerHTML = `<p class="nodata">Loading this area's full profile…</p>`;
+    await state.allLoadedPromise;
+    // If the user clicked a different area while this was in flight,
+    // abandon this now-stale render rather than clobbering theirs.
+    if (state.activeDetailCode !== code) return;
+  }
 
   const countryName = rec.c === "E" ? "England" : "Wales";
   let html = `
@@ -623,9 +695,26 @@ function wireGlobalControls() {
     $("#detailPanel").classList.remove("open");
   });
 
+  // About and Compare & Forecast are built lazily on first open, not at
+  // boot — both need every indicator's data (a full LSOA profile / a live
+  // national correlation across all LSOAs), which only wave 2 of the boot
+  // sequence guarantees. In practice wave 2 finishes long before a user
+  // finds either button; this just makes the rare fast-click case correct
+  // instead of showing a modal built from a partially-loaded dataset.
+  async function ensureModalBuilt(bodyId, builtFlag, buildFn) {
+    if (state[builtFlag]) return;
+    if (!state.allLoaded) {
+      $(bodyId).innerHTML = `<p class="modal-lede">Loading the full dataset…</p>`;
+      await state.allLoadedPromise;
+    }
+    buildFn();
+    state[builtFlag] = true;
+  }
+
   // About modal
   $("#aboutBtn").addEventListener("click", () => {
     $("#aboutModalBackdrop").hidden = false;
+    ensureModalBuilt("#aboutModalBody", "aboutBuilt", buildAboutModal);
   });
   $("#aboutModalClose").addEventListener("click", () => {
     $("#aboutModalBackdrop").hidden = true;
@@ -637,6 +726,7 @@ function wireGlobalControls() {
   // Compare & Forecast modal
   $("#forecastBtn").addEventListener("click", () => {
     $("#forecastModalBackdrop").hidden = false;
+    ensureModalBuilt("#forecastModalBody", "forecastBuilt", buildForecastModal);
   });
   $("#forecastModalClose").addEventListener("click", () => {
     $("#forecastModalBackdrop").hidden = true;
