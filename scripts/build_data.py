@@ -496,6 +496,41 @@ for rec in final.values():
     for k, v in rec["v"].items():
         indicator_values[k].append(v)
 
+# ---------- 11b. National point-comparison series (Census, IMD) — full distribution, not just one mean ----------
+# For a genuine "before vs after" comparison across snapshot editions (as
+# opposed to TREND_KEYS' proper annual series), record mean/median/p10/p90
+# across LSOAs at each snapshot point, not just the mean, so the frontend
+# can chart the actual spread of the distribution rather than reducing
+# 30,000+ LSOAs to a single national number. See fmtAxis/buildComparisonChartSVG
+# in app.js for how this renders — critically, for IMD this is what makes
+# the chart honest: the mean is pinned near zero by construction in every
+# edition (see fit note above), but the p10-p90 band is NOT artificially
+# constrained, so its width is the one part of this chart that carries real
+# information (how spread out England's most vs least deprived areas are).
+def national_point_series(pairs):
+    labels, means, medians, p10s, p90s, ns = [], [], [], [], [], []
+    for label, key in pairs:
+        vals = np.array(indicator_values.get(key, []), dtype=float)
+        labels.append(label)
+        if len(vals) == 0:
+            means.append(None); medians.append(None); p10s.append(None); p90s.append(None); ns.append(0)
+            continue
+        means.append(round(float(vals.mean()), 3))
+        medians.append(round(float(np.median(vals)), 3))
+        p10s.append(round(float(np.percentile(vals, 10)), 3))
+        p90s.append(round(float(np.percentile(vals, 90)), 3))
+        ns.append(int(len(vals)))
+    return {"labels": labels, "mean": means, "median": medians, "p10": p10s, "p90": p90s, "n": ns}
+
+
+national_comparisons = {
+    "census_general_health": national_point_series([("2011", "census2011_health"), ("2021", "census2021_health")]),
+    "imd_health_en": national_point_series([("2019", "imd_health_en_2019"), (latest_imd_year, "imd_health_en")]),
+}
+print("National point comparisons (full distribution, not just the mean):")
+for k, c in national_comparisons.items():
+    print(f"  {k}: {c['labels']} means={c['mean']} p10-p90 spread={[round(h-l,3) for l,h in zip(c['p10'], c['p90'])]}")
+
 ALL_BASE_KEYS_ORDER = QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "imd_health_en", "imd_health_en_2019", "imd_health_en_change", "wimd_health_wa", "wimd_overall_wa", "pct65"] + CENSUS_KEYS
 SUFFIXES_ORDER = ["", "_pctile", "_yoy", "_z", "_adj", "_adj_pctile"]
 schema = [
@@ -548,6 +583,7 @@ meta = {
     "reform_years": REFORM_YEARS,
     "schema": schema,
     "national_trends": national_trends,
+    "national_comparisons": national_comparisons,
     "indicators": {}
 }
 

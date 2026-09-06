@@ -910,6 +910,95 @@ function computeLinearForecast(years, values, horizon) {
 
 const FORECAST_HORIZON = 3;
 
+// ----------------------------------------------------------------------
+// Snapshot-comparison chart (Census 2011→2021, IMD 2019→latest edition):
+// a real line chart of the actual national distribution at each snapshot,
+// not just a single before/after number. The shaded band is the 10th-90th
+// percentile range across every LSOA at that snapshot — most areas fall
+// somewhere in that band, not on the mean line — so a reader sees the
+// spread of the real data, not one summary statistic standing in for it.
+// ----------------------------------------------------------------------
+function buildComparisonChartSVG(comp, opts) {
+  const { unit = "", flatMeanNote = null } = opts || {};
+  const labels = comp.labels;
+  const n = labels.length;
+  if (n < 2 || comp.mean.some((v) => v === null)) {
+    return `<p class="nodata">Not enough data to chart this comparison.</p>`;
+  }
+
+  const W = 560, H = 240, padL = 52, padR = 20, padT = 26, padB = 34;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const allVals = [...comp.p10, ...comp.p90];
+  let yMin = Math.min(...allVals), yMax = Math.max(...allVals);
+  const pad = (yMax - yMin) * 0.18 || Math.abs(yMax) * 0.1 || 1;
+  yMin -= pad; yMax += pad;
+  const yRange = yMax - yMin || 1;
+
+  const xPos = (i) => padL + (i / (n - 1)) * plotW;
+  const yPos = (v) => padT + plotH - ((v - yMin) / yRange) * plotH;
+
+  const bandTop = labels.map((_, i) => `${i === 0 ? "M" : "L"}${xPos(i).toFixed(1)},${yPos(comp.p90[i]).toFixed(1)}`).join(" ");
+  const bandBottom = labels.slice().reverse().map((_, k) => {
+    const i = n - 1 - k;
+    return `L${xPos(i).toFixed(1)},${yPos(comp.p10[i]).toFixed(1)}`;
+  }).join(" ");
+  const bandPath = `${bandTop} ${bandBottom} Z`;
+
+  const meanPath = labels.map((_, i) => `${i === 0 ? "M" : "L"}${xPos(i).toFixed(1)},${yPos(comp.mean[i]).toFixed(1)}`).join(" ");
+
+  const markers = labels.map((lab, i) => {
+    const above = i === 0 ? -14 : -14;
+    return `
+    <circle cx="${xPos(i).toFixed(1)}" cy="${yPos(comp.mean[i]).toFixed(1)}" r="4.5" fill="var(--accent)" stroke="var(--surface, #1a1a1a)" stroke-width="1.5" />
+    <text x="${xPos(i).toFixed(1)}" y="${(yPos(comp.mean[i]) + above).toFixed(1)}" font-size="12" font-weight="700" fill="var(--text-primary, #f2f2f2)" text-anchor="middle">${fmtAxis(comp.mean[i])}${unit}</text>
+    <text x="${xPos(i).toFixed(1)}" y="${H - 10}" font-size="11" fill="var(--text-muted)" text-anchor="middle">${lab}</text>
+  `;
+  }).join("");
+
+  const bandLabels = labels.map((_, i) => `
+    <text x="${xPos(i).toFixed(1)}" y="${(yPos(comp.p90[i]) - 6).toFixed(1)}" font-size="9" fill="var(--text-muted)" text-anchor="middle">${fmtAxis(comp.p90[i])}${unit}</text>
+    <text x="${xPos(i).toFixed(1)}" y="${(yPos(comp.p10[i]) + 12).toFixed(1)}" font-size="9" fill="var(--text-muted)" text-anchor="middle">${fmtAxis(comp.p10[i])}${unit}</text>
+  `).join("");
+
+  const midX = padL + plotW / 2;
+  const midMean = (comp.mean[0] + comp.mean[n - 1]) / 2;
+  const noteEl = flatMeanNote
+    ? `<text x="${midX.toFixed(1)}" y="${(yPos(midMean) - 22).toFixed(1)}" font-size="10" fill="var(--series-orange, #eb6834)" text-anchor="middle">${flatMeanNote}</text>`
+    : "";
+
+  return `
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Comparison of ${labels.join(" vs ")}" style="width:100%;height:auto;">
+      <path d="${bandPath}" fill="var(--accent)" opacity="0.16" stroke="none" />
+      <path d="${meanPath}" fill="none" stroke="var(--accent)" stroke-width="2.5" />
+      ${bandLabels}
+      ${markers}
+      ${noteEl}
+    </svg>
+  `;
+}
+
+function buildComparisonStatsTable(comp, unit) {
+  const rows = comp.labels.map((lab, i) => `
+    <tr>
+      <td>${lab}</td>
+      <td>${fmtAxis(comp.p10[i])}${unit}</td>
+      <td>${fmtAxis(comp.median[i])}${unit}</td>
+      <td>${fmtAxis(comp.mean[i])}${unit}</td>
+      <td>${fmtAxis(comp.p90[i])}${unit}</td>
+      <td>${comp.n[i].toLocaleString()}</td>
+    </tr>
+  `).join("");
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>10th percentile</th><th>Median</th><th>Mean</th><th>90th percentile</th><th>LSOAs</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 function buildForecastChartSVG(key) {
   const nt = state.meta.national_trends[key];
   const m = state.meta.indicators[key];
@@ -1056,14 +1145,19 @@ function buildForecastModal() {
     <h3>Census 2011 vs 2021: has self-reported health changed?</h3>
     <p>Both censuses asked the same question — <em>"How is your health in general?"</em> — on the same five-point scale
     (Very good / Good / Fair / Bad / Very bad), a decade apart. That shared wording and scale is what makes this a
-    genuinely valid comparison, unlike the deprivation indices elsewhere in this dashboard.</p>
-    <div class="census-stat-row">
-      <div class="census-stat"><div class="census-stat-label">2011</div><div class="census-stat-value">${mean2011.toFixed(2)}%</div><div class="census-stat-sub">reporting bad/very bad health</div></div>
-      <div class="census-stat"><div class="census-stat-label">2021</div><div class="census-stat-value">${mean2021.toFixed(2)}%</div><div class="census-stat-sub">reporting bad/very bad health</div></div>
-      <div class="census-stat"><div class="census-stat-label">Change</div><div class="census-stat-value">${censusChange > 0 ? "+" : ""}${censusChange.toFixed(2)} pp</div><div class="census-stat-sub">England &amp; Wales average, unweighted across LSOAs</div></div>
-    </div>
-    <p>This is also on the map itself — look for the <strong>"Census: self-reported health"</strong> group in the sidebar,
-    with 2011, 2021, and the change between them as three separate layers you can explore area-by-area.</p>
+    genuinely valid comparison, unlike the deprivation indices elsewhere in this dashboard. Census only happens once a
+    decade, so there genuinely are only two real data points here — 2011 and 2021 — no in-between years exist to plot;
+    the chart below shows exactly those two, not an interpolation.</p>
+    <p><strong>How to read this chart:</strong> each dot is the England &amp; Wales average % of people reporting bad or
+    very bad health that census year. The shaded band is <em>not</em> a margin of error — it's the actual range within
+    which the middle 80% of neighbourhoods fall (the 10th to 90th percentile), so you can see that most LSOAs sit
+    somewhere inside that band, not exactly on the average line.</p>
+    <div class="forecast-chart-holder">${buildComparisonChartSVG(state.meta.national_comparisons.census_general_health, { unit: "%" })}</div>
+    ${buildComparisonStatsTable(state.meta.national_comparisons.census_general_health, "%")}
+    <p>Both the average <em>and</em> the spread narrowed slightly between 2011 and 2021 — the whole distribution shifted
+    towards better self-reported health, not just the headline average. This is also on the map itself — look for the
+    <strong>"Census: self-reported health"</strong> group in the sidebar, with 2011, 2021, and the change between them as
+    three separate layers you can explore area-by-area.</p>
 
     <h3>England deprivation: IMD2019 vs IMD2025 (use with caution)</h3>
     <p>Unlike the Census comparison above, this one comes with a real methodological catch, stated plainly:
@@ -1074,11 +1168,20 @@ function buildForecastModal() {
     scores alone. MHCLG's own guidance is that IMD scores and ranks are designed to compare areas <em>within the same
     edition</em>, not across editions. Read the figures below as suggestive context, not a validated trend the way the
     Census comparison is.</p>
-    <p><strong>Why there's no national "mean 2019 vs mean 2025" figure here</strong> (unlike the Census stats above):
-    IMD scores are standardised so England's mean sits near zero in <em>every</em> edition — that's a property of how
-    the score is built, not a measurement. Averaging it across LSOAs would show ~0 regardless of what actually
-    happened, which would be actively misleading. What can honestly be said is whether areas kept their
-    <em>relative</em> position:</p>
+    <p><strong>How to read this chart</strong> — read the <em>band width</em>, not the line height. The solid line is the
+    England mean, and it barely moves, because IMD scores are standardised so the national mean sits near zero in
+    <em>every single edition</em> — that's a property of how the score is built, not a measurement of anything. Plotting
+    it isn't meaningless, though: what genuinely can shift is the <strong>shaded band</strong> — the range covering the
+    middle 80% of LSOAs. A wider band means a bigger gap between England's least and most deprived neighbourhoods; a
+    narrower one means less inequality between them. That gap is not fixed by the scoring method, so a real change
+    there is a real finding.</p>
+    <div class="forecast-chart-holder">${buildComparisonChartSVG(state.meta.national_comparisons.imd_health_en, { unit: "", flatMeanNote: "↑ mean pinned near 0 by design — read the band, not this line" })}</div>
+    ${buildComparisonStatsTable(state.meta.national_comparisons.imd_health_en, "")}
+    <p>The band widened slightly between 2019 and ${state.meta.indicators.imd_health_en.year} — a small increase in the
+    gap between England's most and least health-deprived neighbourhoods — though remember this mixes any real change
+    with the effect of MHCLG's methodology revision, so treat it as suggestive, not proof of rising inequality.</p>
+    <p>The chart above describes the shape of the whole distribution; a different, equally valid question is whether
+    <em>individual</em> areas kept their relative position within it:</p>
     <div class="census-stat-row">
       <div class="census-stat"><div class="census-stat-label">Correlation (r)</div><div class="census-stat-value">${imdCorr.toFixed(2)}</div><div class="census-stat-sub">2019 vs 2025 score, across ${nImd.toLocaleString()} LSOAs</div></div>
       <div class="census-stat"><div class="census-stat-label">Relatively worse</div><div class="census-stat-value">${pctWorse.toFixed(1)}%</div><div class="census-stat-sub">of LSOAs' score rose (higher = more deprived)</div></div>
