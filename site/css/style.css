@@ -35,7 +35,16 @@ a { color: var(--accent-dark); }
   background: var(--surface-1);
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
-  z-index: 20;
+  /* Needs `position` for `z-index` to do anything (it's a no-op on a
+     static element). Without this, .app-body's flex-item .sidebar — a
+     later DOM sibling that gets its own stacking context purely from
+     being a flex item with a z-index — paints over this entire header,
+     search results dropdown included, regardless of the dropdown's own
+     (locally-correct) higher z-index: a static element's z-index is
+     ignored, so the comparison that actually happens is whichever
+     sibling comes later in the DOM, not the numbers written here. */
+  position: relative;
+  z-index: 1300;
 }
 .header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .header-icon { font-size: 28px; }
