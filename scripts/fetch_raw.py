@@ -179,31 +179,52 @@ def fetch_prescribing():
 # ---------------------------------------------------------------------------
 # England — Indices of Deprivation (gov.uk Content API, best-effort discovery)
 # ---------------------------------------------------------------------------
-GOVUK_SEARCH = "https://www.gov.uk/api/search.json?q=English+Indices+of+Deprivation&order=-public_timestamp&filter_content_store_document_type=statistics"
-FALLBACK_IMD_FILE5 = "https://assets.publishing.service.gov.uk/media/5d8b3b51ed915d036a455aa6/File_5_-_IoD2019_Scores.xlsx"
+# NOTE: an earlier version of this query used
+# `filter_content_store_document_type=statistics&order=-public_timestamp`,
+# which silently returned irrelevant results (that document type matches
+# each department's generic "Statistics at X" landing page, not the actual
+# release; `order=` also overrides relevance ranking entirely) — confirmed
+# broken by testing it live. The real release pages are
+# `national_statistics`, and dropping `order=` lets relevance ranking (which
+# works well for this exact phrase) surface the right one first.
+GOVUK_SEARCH = "https://www.gov.uk/api/search.json?q=english+indices+of+deprivation&filter_content_store_document_type=national_statistics&count=10"
+FALLBACK_IMD_LATEST = "https://assets.publishing.service.gov.uk/media/691ded34513046b952c500bd/File_5_IoD2025_Scores_for_the_Indices_of_Deprivation.xlsx"
+FALLBACK_IMD_2019 = "https://assets.publishing.service.gov.uk/media/5d8b3b51ed915d036a455aa6/File_5_-_IoD2019_Scores.xlsx"
 
 
 def fetch_england_imd():
     print("\n== England IMD Health Deprivation domain (gov.uk) ==")
-    url = FALLBACK_IMD_FILE5
+    # Latest edition — auto-discovered, so a future IMD (2031, ...) is
+    # picked up with no code change, the same guarantee every other source
+    # in this file makes.
+    url = FALLBACK_IMD_LATEST
     try:
         results = get_json(GOVUK_SEARCH).get("results", [])
-        for res in results:
-            title = res.get("title", "")
-            if "indices of deprivation" not in title.lower():
-                continue
-            content = get_json("https://www.gov.uk/api/content" + res["link"])
+        match = next(
+            (r for r in results if re.match(r"english indices of deprivation \d{4}$", r.get("title", "").strip().lower())),
+            None,
+        )
+        if match:
+            content = get_json("https://www.gov.uk/api/content" + match["link"])
             attachments = content.get("details", {}).get("attachments", [])
             for att in attachments:
                 if att.get("title", "").strip().lower().startswith("file 5"):
                     url = att["url"]
-                    print(f"  auto-discovered: {title!r} -> {url}")
+                    print(f"  auto-discovered latest edition: {match['title']!r} -> {url}")
                     break
-            break
     except Exception as e:
-        print(f"  [WARN] discovery failed ({e}), using known-good fallback")
+        print(f"  [WARN] discovery failed ({e}), using known-good fallback (IMD2025)")
     data = get(url)
-    save(RAW / "england_imd" / "File_5_scores.xlsx", data)
+    save(RAW / "england_imd" / "File_5_scores_latest.xlsx", data)
+
+    # 2019 edition — kept as a fixed historical comparison point (same idea
+    # as Census 2011: it will never be republished, so no discovery is
+    # needed, just a stable URL) so build_data.py can compute a "how has
+    # relative deprivation shifted since 2019" comparison against whatever
+    # the latest edition turns out to be.
+    print("  fetching IMD2019 (fixed historical comparison point)...")
+    data19 = get(FALLBACK_IMD_2019)
+    save(RAW / "england_imd" / "File_5_scores_2019.xlsx", data19)
 
 
 # ---------------------------------------------------------------------------

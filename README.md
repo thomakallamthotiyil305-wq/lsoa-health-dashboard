@@ -71,13 +71,13 @@ structure, that one step might need a URL bump (everything else needs none).
 | QOF disease prevalence (8 conditions) | NHS England via [PLDR](https://pldr.org) | England (+ partial border) |
 | Prescribing rates (6 drug classes) | NHS Business Services Authority via PLDR | England (+ partial border) |
 | Frailty | Small Area Frailty Index via PLDR (MSOA) | England |
-| Health deprivation | MHCLG English Indices of Deprivation 2019 | England |
+| Health deprivation | MHCLG English Indices of Deprivation 2025 (+ 2019 for comparison) | England |
 | Health deprivation | Welsh Index of Multiple Deprivation 2019 | Wales |
+| Population aged 65+ | ONS mid-year LSOA population estimates by broad age band (12-year series) | England & Wales |
 | Self-reported general health, Census 2011 | ONS, table KS301EW, via Nomis | England & Wales |
 | Self-reported general health, Census 2021 | ONS, table TS037, via Nomis | England & Wales |
 | Boundaries | ONS Open Geography Portal, LSOA (Dec 2011) BSC | England & Wales |
 | Geography lookup | ONS OA→LSOA→MSOA→LAD (Dec 2011) Exact Fit | England & Wales |
-| Population by age | ONS mid-year LSOA population estimates | England & Wales |
 
 Full per-indicator citations, licences and caveats are in
 `site/js/sources.js` and rendered in the app's "Data & methodology" modal.
@@ -101,6 +101,17 @@ A second modal (separate from "Data & methodology") holds two more things:
   unlike the deprivation indices, which are explicitly *not* comparable
   across editions (see the in-app explanation). Also selectable as three map
   layers: 2011, 2021, and the change between them.
+- **England deprivation, IMD2019 vs IMD2025**: offered with a much heavier
+  caveat than the Census comparison, because MHCLG revised the Health
+  Deprivation & Disability domain's indicators between editions — a change
+  in score is a mix of real change and methodology revision that can't be
+  cleanly separated. Deliberately does **not** show a national mean-vs-mean
+  figure (IMD scores are standardised to ~0 nationally in every edition, so
+  that comparison would be circular); instead shows the cross-edition
+  correlation and the % of LSOAs whose relative score rose vs fell. Wales's
+  WIMD2025 exists but isn't included — its raw domain scores aren't
+  available as a public bulk download at the time of writing, only via an
+  interactive ranks/groups tool on the new StatsWales platform.
 - **Simple trend forecasts**: an ordinary-least-squares linear trend fit to
   each multi-year indicator's national series, extrapolated 3 years with a
   proper widening prediction interval. Deliberately the simplest defensible
@@ -142,10 +153,16 @@ python3 -m http.server 8642 --directory site
 
 ## Known limitations / next steps
 
-- Deprivation indices (IMD2019/WIMD2019) deliberately have no trend/change/
-  age-adjusted view — they're single-edition composite indices, and ONS/
-  Welsh Government guidance warns against comparing scores or ranks across
-  editions. This is a methodological choice, not a missing feature.
+- England's deprivation score now compares IMD2019 and IMD2025, but
+  deliberately still gets no z-score or age-adjusted view — it's two
+  independently-rebuilt composite indices, not a real annual series, and
+  ONS/Welsh Government guidance warns against comparing scores or ranks
+  across editions. See "📈 Compare & Forecast" for the full caveat and why
+  the comparison shown is a correlation + % worse/better, not a naive mean
+  difference. Wales stays at WIMD2019 only — WIMD2025 exists but its raw
+  domain scores aren't accessible as a bulk download (only ranks/groups via
+  an interactive tool on the new StatsWales platform), a genuine data-access
+  gap rather than a methodological choice.
 - The age-adjusted ratio is an indirect-standardisation-style approximation
   (regression against local % 65+), not a true directly age-standardised
   rate — neither QOF nor NHSBSA data publishes age-specific rates at LSOA

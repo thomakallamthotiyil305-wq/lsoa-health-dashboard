@@ -754,9 +754,14 @@ function buildAboutModal() {
     Wales's own official small-area health measure — the WIMD 2019 Health Domain score — which <strong>is</strong> published at LSOA level.</p>
 
     <h3>England vs Wales deprivation scores are not directly comparable</h3>
-    <p>England's IMD2019 Health Deprivation &amp; Disability score and Wales's WIMD2019 Health Domain score are each constructed from different underlying
+    <p>England's IMD Health Deprivation &amp; Disability score and Wales's WIMD2019 Health Domain score are each constructed from different underlying
     indicators, on different scales, calculated independently by MHCLG and the Welsh Government respectively. Both are shown because both are the
     official small-area health-deprivation measure for their nation, but a numeric value in one nation is not equivalent to the same number in the other.</p>
+    <p>England's score is shown for its two most recent editions — <strong>IMD2025</strong> (the current raw-value layer) and <strong>IMD2019</strong> —
+    plus the change between them, so you can see how an area's relative deprivation has shifted. Treat that change with real caution: see
+    "📈 Compare &amp; Forecast" for why a 2019→2025 change is a rougher comparison than the Census change above it. Wales's WIMD2025 also exists, but its
+    raw domain scores aren't available as a public bulk download at the time of writing (the new StatsWales platform only exposes ranks/quintile
+    groups through an interactive query tool, not a downloadable score) — so Wales here still shows WIMD2019 only.</p>
 
     <h3>Full source list</h3>
     <div class="table-wrap">
@@ -780,7 +785,7 @@ function buildAboutModal() {
       <li><strong>Raw rate</strong> shows only the latest available period per indicator (year shown per indicator above); the year-on-year change and
       z-score use the two most recent years, and the trend charts use every year available in the source archive (back to 2005 for some QOF conditions).</li>
       <li><strong>Prescribing rates</strong> use the source data's own pre-calculated "items per 1,000 patients" rate field; see each PLDR indicator specification (linked from its dataset page) for the exact denominator methodology. Prescribing's annual series uses each year's last available quarter (Q4, where published) as that year's snapshot, so it's comparable year-to-year the same way QOF's genuinely-annual data is.</li>
-      <li><strong>Why deprivation scores don't get a trend/change/age-adjusted view</strong> — this is a deliberate exclusion, not a gap: IMD2019 and WIMD2019 are each a single edition of a composite rank-based index, and ONS/Welsh Government guidance explicitly warns against comparing scores or ranks <em>across</em> editions, because a rank can shift simply because other areas changed relative to it, not because the area itself did. There's no valid "year-on-year change" to compute from one edition, so this dashboard doesn't manufacture one.</li>
+      <li><strong>Why deprivation scores don't get the same trend/z-score/age-adjusted treatment as QOF and prescribing</strong> — deprivation indices are composite, rank-based indices rebuilt from scratch each edition (new indicators, new weights), unlike QOF's genuinely repeated annual measurement of the same thing. England's IMD2019→2025 change (below, and in "📈 Compare &amp; Forecast") is offered as a rough, honestly-caveated comparison — not a real year-on-year series, so it doesn't get a z-score or age-adjustment either. Wales's WIMD2019 is a single edition with no newer comparable data available (see above), so it gets no change view at all. ONS/Welsh Government guidance explicitly warns against comparing scores or ranks <em>across</em> editions for exactly this reason — a rank can shift simply because other areas changed relative to it, not because the area itself did.</li>
       <li><strong>QOF prevalence</strong> is the percentage of a GP practice's registered patients on that condition's disease register, apportioned to LSOA by the home postcodes of registered patients — these are modelled small-area estimates, not direct counts, and carry the uncertainty that implies.</li>
       <li><strong>Frailty</strong> is published at Middle Super Output Area (MSOA) level — roughly 4–5 LSOAs per MSOA — and has been broadcast unchanged to every LSOA within each MSOA so it can be shown on this LSOA-level map. It should be read at MSOA resolution, not interpreted as LSOA-specific.</li>
       <li><strong>Colour classes</strong> are quintiles (five equal-count bins) computed independently per indicator and per view mode across all LSOAs with data, using the 2011 LSOA geography.</li>
@@ -1011,6 +1016,32 @@ function buildForecastModal() {
   const mean2011 = sum2011 / n2011, mean2021 = sum2021 / n2021;
   const censusChange = mean2021 - mean2011;
 
+  // England's two most recent deprivation editions — deliberately NOT shown
+  // as a national mean-vs-mean comparison like the Census above. IMD scores
+  // are constructed so the England-wide mean sits near zero in every single
+  // edition (it's a standardised score, not a measured quantity like %
+  // reporting bad health) — so a "mean 2019 vs mean 2025" comparison would
+  // be near-zero *by construction*, regardless of what actually happened,
+  // and would misleadingly look like "no change" either way. What's
+  // actually meaningful is whether areas kept their relative position:
+  // the correlation between an LSOA's 2019 and 2025 score, and how many
+  // areas' relative score rose (worse) vs fell (better).
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0, nImd = 0, nWorse = 0, nBetter = 0;
+  for (const code in state.data) {
+    const rec = state.data[code];
+    const v19 = getVal(rec, "imd_health_en_2019", "raw");
+    const v25 = getVal(rec, "imd_health_en", "raw");
+    if (v19 !== undefined && v25 !== undefined) {
+      sumX += v19; sumY += v25; sumXY += v19 * v25; sumX2 += v19 * v19; sumY2 += v25 * v25; nImd++;
+      if (v25 > v19) nWorse++; else if (v25 < v19) nBetter++;
+    }
+  }
+  const meanX = sumX / nImd, meanY = sumY / nImd;
+  const covXY = sumXY / nImd - meanX * meanY;
+  const varX = sumX2 / nImd - meanX * meanX, varY = sumY2 / nImd - meanY * meanY;
+  const imdCorr = covXY / Math.sqrt(varX * varY);
+  const pctWorse = (nWorse / nImd) * 100, pctBetter = (nBetter / nImd) * 100;
+
   const trendKeys = Object.keys(state.meta.indicators).filter((k) => state.meta.indicators[k].has_trend);
   const trendOptions = trendKeys.map((k) =>
     `<option value="${k}">${state.meta.indicators[k].label}</option>`
@@ -1034,6 +1065,38 @@ function buildForecastModal() {
     <p>This is also on the map itself — look for the <strong>"Census: self-reported health"</strong> group in the sidebar,
     with 2011, 2021, and the change between them as three separate layers you can explore area-by-area.</p>
 
+    <h3>England deprivation: IMD2019 vs IMD2025 (use with caution)</h3>
+    <p>Unlike the Census comparison above, this one comes with a real methodological catch, stated plainly:
+    <strong>MHCLG rebuilds the Index of Multiple Deprivation from scratch each edition</strong> — the underlying indicators,
+    data sources and weightings within the Health Deprivation &amp; Disability domain were revised between 2019 and 2025.
+    So a change in this score is a mix of <em>genuine change in an area's relative health deprivation</em> and
+    <em>changes in how the index itself is built</em> — and there is no way to cleanly separate the two from the published
+    scores alone. MHCLG's own guidance is that IMD scores and ranks are designed to compare areas <em>within the same
+    edition</em>, not across editions. Read the figures below as suggestive context, not a validated trend the way the
+    Census comparison is.</p>
+    <p><strong>Why there's no national "mean 2019 vs mean 2025" figure here</strong> (unlike the Census stats above):
+    IMD scores are standardised so England's mean sits near zero in <em>every</em> edition — that's a property of how
+    the score is built, not a measurement. Averaging it across LSOAs would show ~0 regardless of what actually
+    happened, which would be actively misleading. What can honestly be said is whether areas kept their
+    <em>relative</em> position:</p>
+    <div class="census-stat-row">
+      <div class="census-stat"><div class="census-stat-label">Correlation (r)</div><div class="census-stat-value">${imdCorr.toFixed(2)}</div><div class="census-stat-sub">2019 vs 2025 score, across ${nImd.toLocaleString()} LSOAs</div></div>
+      <div class="census-stat"><div class="census-stat-label">Relatively worse</div><div class="census-stat-value">${pctWorse.toFixed(1)}%</div><div class="census-stat-sub">of LSOAs' score rose (higher = more deprived)</div></div>
+      <div class="census-stat"><div class="census-stat-label">Relatively better</div><div class="census-stat-value">${pctBetter.toFixed(1)}%</div><div class="census-stat-sub">of LSOAs' score fell</div></div>
+    </div>
+    <p>A correlation this close to 1 means most areas' <em>relative</em> position barely moved — expected, since
+    deprivation is strongly geographically persistent — but it still mixes real local change with the effect of
+    MHCLG's methodology revision, so don't read even this as a clean "X% of England got worse."</p>
+    <p>England-only (Wales has no comparable newer edition available — see below). Also on the map: the
+    <strong>"Deprivation"</strong> group in the sidebar now has three England layers — 2025, 2019, and the change between
+    them — alongside Wales's WIMD2019.</p>
+    <p class="modal-lede" style="margin-top:10px;"><strong>Wales's WIMD2025 exists but isn't usable here.</strong> The Welsh
+    Government published WIMD2025 on the new StatsWales platform, but at the time of writing it only exposes ranks and
+    quintile groups through an interactive, JavaScript-driven query tool — not a downloadable file of raw domain scores
+    (unlike WIMD2019, which was published as a plain spreadsheet). Rather than fabricate a Wales comparison from
+    incomplete data, this dashboard simply doesn't show one. If Stats Wales publishes a bulk download in future, this is
+    the one gap here that's an access problem, not a methodological one.</p>
+
     <h3>Simple trend forecasts</h3>
     <p>Pick an indicator to see its England-wide trend and a ${FORECAST_HORIZON}-year projection:</p>
     <select id="forecastIndicatorPicker" class="forecast-picker">${trendOptions}</select>
@@ -1052,6 +1115,10 @@ function buildForecastModal() {
       <li><strong>Census 2011 general health:</strong> <a href="${SOURCE_CITATIONS.census2011_health.url}" target="_blank" rel="noopener">${SOURCE_CITATIONS.census2011_health.dataset}</a>, ${SOURCE_CITATIONS.census2011_health.publisher}.</li>
       <li><strong>Census 2021 general health:</strong> <a href="${SOURCE_CITATIONS.census2021_health.url}" target="_blank" rel="noopener">${SOURCE_CITATIONS.census2021_health.dataset}</a>, ${SOURCE_CITATIONS.census2021_health.publisher}.</li>
       <li><strong>2021 figures</strong> are published on 2021 LSOA boundaries; they're matched onto the 2011 LSOAs used throughout this dashboard via the same ONS exact-fit crosswalk documented in "Data &amp; methodology".</li>
+      <li><strong>IMD2025 (England):</strong> <a href="${SOURCE_CITATIONS.imd_health_en.url}" target="_blank" rel="noopener">${SOURCE_CITATIONS.imd_health_en.dataset}</a>, ${SOURCE_CITATIONS.imd_health_en.publisher}, published 30 October 2025. Also on 2021 LSOA boundaries, crosswalked to 2011 LSOAs the same way as the Census 2021 and population-by-age figures.</li>
+      <li><strong>IMD2019 (England):</strong> <a href="${SOURCE_CITATIONS.imd_health_en_2019.url}" target="_blank" rel="noopener">${SOURCE_CITATIONS.imd_health_en_2019.dataset}</a>, ${SOURCE_CITATIONS.imd_health_en_2019.publisher}.</li>
+      <li><strong>WIMD2019 (Wales):</strong> <a href="${SOURCE_CITATIONS.wimd_health_wa.url}" target="_blank" rel="noopener">${SOURCE_CITATIONS.wimd_health_wa.dataset}</a>, ${SOURCE_CITATIONS.wimd_health_wa.publisher}. WIMD2025 was checked but its raw domain scores were not available as a bulk download at the time of writing — see the caveat above.</li>
+      <li><strong>Population aged 65+:</strong> <a href="${SOURCE_CITATIONS.pct65.url}" target="_blank" rel="noopener">${SOURCE_CITATIONS.pct65.dataset}</a>, ${SOURCE_CITATIONS.pct65.publisher} — now shown with a full ${state.meta.national_trends.pct65 ? state.meta.national_trends.pct65.years.length : ""}-year history (${state.meta.national_trends.pct65 ? state.meta.national_trends.pct65.years[0] : ""}–${state.meta.national_trends.pct65 ? state.meta.national_trends.pct65.years[state.meta.national_trends.pct65.years.length - 1] : ""}), selectable above like any other trend indicator.</li>
     </ul>
   `;
 

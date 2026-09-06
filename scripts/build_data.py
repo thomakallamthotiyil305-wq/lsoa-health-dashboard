@@ -56,7 +56,7 @@ time_series = {}                # indicator key -> {year: {lsoa_code: value}}  (
 QOF_KEYS = ["chd", "copd", "af", "stroke", "ckd", "hf", "pad", "osteo"]
 PRESCRIBING_KEYS = ["statins", "oac", "anticoag", "clopidogrel", "prasugrel", "ticagrelor"]
 AGE_ADJUSTABLE_KEYS = QOF_KEYS + PRESCRIBING_KEYS   # indicators with a real age-vs-rate relationship worth adjusting for
-TREND_KEYS = QOF_KEYS + PRESCRIBING_KEYS + ["frailty"]   # indicators with a usable annual series
+TREND_KEYS = QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "pct65"]   # indicators with a usable annual series
 REFORM_YEARS = [
     {"year": 2013, "label": "PCTs abolished, CCGs created (Health and Social Care Act 2012)"},
     {"year": 2022, "label": "CCGs abolished, Integrated Care Boards created (Health and Care Act 2022)"},
@@ -75,12 +75,23 @@ with open(STATIC / "lsoa_msoa_lad_lookup.csv") as f:
         rec["msoa"] = row["MSOA11CD"]
         rec["c"] = "E" if code.startswith("E") else "W"
 
+# ---------- 1b. LSOA (2011) -> LSOA (2021) crosswalk, shared by anything published on 2021 geography ----------
+lookup21_path = STATIC / "lsoa11_to_lsoa21_lookup.csv"
+lsoa11_to_21 = defaultdict(list)
+if lookup21_path.exists():
+    with open(lookup21_path) as f:
+        for row in csv.DictReader(f):
+            lsoa11_to_21[row["LSOA11CD"]].append(row["LSOA21CD"])
+
 # ---------- 2. England IMD2019 Health Deprivation domain (parsed live from .xlsx) ----------
-imd_path = RAW / "england_imd" / "File_5_scores.xlsx"
-if imd_path.exists():
-    xl = pd.ExcelFile(imd_path)
+# Loaded as the *historical* point of comparison (see "latest edition" below,
+# which becomes the current `imd_health_en` raw-value layer) — 2019 uses the
+# 2011 LSOA geography directly, no crosswalk needed.
+imd2019_path = RAW / "england_imd" / "File_5_scores_2019.xlsx"
+if imd2019_path.exists():
+    xl = pd.ExcelFile(imd2019_path)
     sheet = next((s for s in xl.sheet_names if "score" in s.lower()), xl.sheet_names[-1])
-    df = pd.read_excel(imd_path, sheet_name=sheet)
+    df = pd.read_excel(imd2019_path, sheet_name=sheet)
     col_lsoa = next(c for c in df.columns if c.lower().startswith("lsoa code"))
     col_name = next(c for c in df.columns if c.lower().startswith("lsoa name"))
     col_health = next(c for c in df.columns if "health deprivation" in c.lower())
@@ -88,8 +99,48 @@ if imd_path.exists():
         code = row[col_lsoa]
         rec = get(code)
         rec["n"] = row[col_name]
-        rec.setdefault("v", {})["imd_health_en"] = round(float(row[col_health]), 3)
-    print(f"England IMD: {len(df)} LSOAs loaded from {imd_path.name}")
+        rec.setdefault("v", {})["imd_health_en_2019"] = round(float(row[col_health]), 3)
+    print(f"England IMD2019: {len(df)} LSOAs loaded from {imd2019_path.name}")
+
+# ---------- 2b. England IMD "latest edition" Health Deprivation domain — becomes the current value ----------
+# fetch_raw.py auto-discovers whichever edition gov.uk currently publishes
+# as newest (see its own comment for why the old discovery query silently
+# failed) — this section never hardcodes a year, only the 2019 fallback
+# above does, because 2019 is a fixed historical anchor, not "whatever's
+# newest". Published on 2021 LSOA geography; crosswalked back to 2011 LSOAs
+# (this dashboard's canonical geography) the same way the population-by-age
+# data below is, by averaging across split/merged areas.
+imd_latest_path = RAW / "england_imd" / "File_5_scores_latest.xlsx"
+latest_imd_year = "latest"
+if imd_latest_path.exists() and lsoa11_to_21:
+    xl = pd.ExcelFile(imd_latest_path)
+    sheet = next((s for s in xl.sheet_names if "score" in s.lower()), xl.sheet_names[-1])
+    m = re.search(r"(20\d{2})", sheet)
+    if m:
+        latest_imd_year = m.group(1)
+    df = pd.read_excel(imd_latest_path, sheet_name=sheet)
+    col_lsoa = next(c for c in df.columns if c.lower().startswith("lsoa code"))
+    col_health = next(c for c in df.columns if "health deprivation" in c.lower())
+    health_by_lsoa21 = {row[col_lsoa]: float(row[col_health]) for _, row in df.iterrows()}
+
+    n_latest = n_change = 0
+    for lsoa11, lsoa21_list in lsoa11_to_21.items():
+        if lsoa11 not in records:
+            continue
+        vals = [health_by_lsoa21[c] for c in lsoa21_list if c in health_by_lsoa21]
+        if not vals:
+            continue
+        v_latest = sum(vals) / len(vals)
+        rec = get(lsoa11)
+        rec.setdefault("v", {})["imd_health_en"] = round(v_latest, 3)
+        n_latest += 1
+        if "imd_health_en_2019" in rec.get("v", {}):
+            rec["v"]["imd_health_en_change"] = round(v_latest - rec["v"]["imd_health_en_2019"], 3)
+            n_change += 1
+    print(f"England IMD{latest_imd_year}: {n_latest} LSOAs loaded from {imd_latest_path.name} (crosswalked 2021→2011 LSOA), "
+          f"{n_change} with both editions for a 2019→{latest_imd_year} comparison")
+else:
+    print("England IMD (latest edition): source file missing, skipped (imd_health_en will be unavailable)")
 
 # ---------- 3. Wales WIMD2019 domain scores (parsed live from .ods) ----------
 wimd_path = RAW / "wales" / "wimd_domain_scores.ods"
@@ -208,47 +259,53 @@ if year_files:
           f"(auto-detected latest year; {len(years_present)} years of history retained)")
 
 # ---------- 7. Population by broad age band -> % aged 65+ per LSOA (2011 geography) ----------
-pct65 = {}
+# Every available year sheet is loaded (not just the latest) so pct65 gets
+# the same trend/year-on-year-change/z-score treatment as the disease and
+# prescribing indicators, via TREND_KEYS.
+pct65 = {}   # latest year only -> {lsoa11: pct}, used by fit_age_adjustment()
 age_pop_path = RAW / "age_pop" / "sapelsoabroadage.xlsx"
-lookup_path = STATIC / "lsoa11_to_lsoa21_lookup.csv"
-if age_pop_path.exists() and lookup_path.exists():
+if age_pop_path.exists() and lsoa11_to_21:
     xl = pd.ExcelFile(age_pop_path)
-    # Sheets are named e.g. "Mid-2022 LSOA 2021" — pick the latest year available.
+    # Sheets are named e.g. "Mid-2022 LSOA 2021" — one per available year.
     year_sheets = {}
     for s in xl.sheet_names:
         m = re.match(r"Mid-(\d{4}) LSOA", s)
         if m:
             year_sheets[int(m.group(1))] = s
+
+    pct65_ts = {}   # year (str) -> {lsoa11: pct}
+    for year, sheet_name in sorted(year_sheets.items()):
+        df = pd.read_excel(age_pop_path, sheet_name=sheet_name, header=3)
+        col_65 = [c for c in df.columns if "65" in str(c)]
+        total_col = "Total"
+        lsoa21_col = next(c for c in df.columns if "LSOA" in str(c) and "Code" in str(c))
+        pct65_by_lsoa21 = {}
+        for _, row in df.iterrows():
+            total = row[total_col]
+            if not total:
+                continue
+            p65 = sum(row[c] for c in col_65)
+            pct65_by_lsoa21[row[lsoa21_col]] = p65 / total * 100
+
+        year_vals = {}
+        for lsoa11, lsoa21_list in lsoa11_to_21.items():
+            vals = [pct65_by_lsoa21[c] for c in lsoa21_list if c in pct65_by_lsoa21]
+            if vals:
+                year_vals[lsoa11] = sum(vals) / len(vals)
+        pct65_ts[str(year)] = year_vals
+
     latest_pop_year = max(year_sheets)
-    sheet_name = year_sheets[latest_pop_year]
-    df = pd.read_excel(age_pop_path, sheet_name=sheet_name, header=3)
-    col_65 = [c for c in df.columns if "65" in str(c)]
-    total_col = "Total"
-    lsoa21_col = next(c for c in df.columns if "LSOA" in str(c) and "Code" in str(c))
-    pct65_by_lsoa21 = {}
-    for _, row in df.iterrows():
-        total = row[total_col]
-        if not total:
-            continue
-        p65 = sum(row[c] for c in col_65)
-        pct65_by_lsoa21[row[lsoa21_col]] = p65 / total * 100
-
-    lsoa11_to_21 = defaultdict(list)
-    with open(lookup_path) as f:
-        for row in csv.DictReader(f):
-            lsoa11_to_21[row["LSOA11CD"]].append(row["LSOA21CD"])
-
-    for lsoa11, lsoa21_list in lsoa11_to_21.items():
-        vals = [pct65_by_lsoa21[c] for c in lsoa21_list if c in pct65_by_lsoa21]
-        if vals:
-            pct65[lsoa11] = sum(vals) / len(vals)
+    pct65 = pct65_ts[str(latest_pop_year)]
+    time_series["pct65"] = pct65_ts
+    detected_years["pct65"] = str(latest_pop_year)
 
     for code, val in pct65.items():
         if code in records:
             records[code].setdefault("v", {})["pct65"] = round(val, 2)
 
     print(f"Age profile: % 65+ computed for {len(pct65)} LSOAs from mid-{latest_pop_year} "
-          f"population estimates (2021 LSOA geography, matched via ONS exact-fit crosswalk)")
+          f"population estimates (2021 LSOA geography, matched via ONS exact-fit crosswalk); "
+          f"{len(pct65_ts)} years of history retained ({min(year_sheets)}-{latest_pop_year})")
 else:
     print("Age profile: source files missing, skipping age-adjustment features")
 
@@ -397,7 +454,7 @@ def national_trend(key):
 
 
 print("\nComputing derived statistics...")
-for key in QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "imd_health_en", "wimd_health_wa", "wimd_overall_wa", "pct65"] + CENSUS_KEYS:
+for key in QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "imd_health_en", "imd_health_en_2019", "imd_health_en_change", "wimd_health_wa", "wimd_overall_wa", "pct65"] + CENSUS_KEYS:
     add_percentiles(key)
 
 print("Year-on-year change + z-score of change (QOF conditions, prescribing, frailty):")
@@ -439,7 +496,7 @@ for rec in final.values():
     for k, v in rec["v"].items():
         indicator_values[k].append(v)
 
-ALL_BASE_KEYS_ORDER = QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "imd_health_en", "wimd_health_wa", "wimd_overall_wa", "pct65"] + CENSUS_KEYS
+ALL_BASE_KEYS_ORDER = QOF_KEYS + PRESCRIBING_KEYS + ["frailty", "imd_health_en", "imd_health_en_2019", "imd_health_en_change", "wimd_health_wa", "wimd_overall_wa", "pct65"] + CENSUS_KEYS
 SUFFIXES_ORDER = ["", "_pctile", "_yoy", "_z", "_adj", "_adj_pctile"]
 schema = [
     f"{base}{suf}"
@@ -510,7 +567,9 @@ INDICATOR_META = {
     "prasugrel": {"label": "Prasugrel", "group": "Prescribing (England)", "unit": "items per 1,000 patients (rate)", "source": "NHSBSA via PLDR (P_1_16)", "coverage": "England (+ partial border areas)"},
     "ticagrelor": {"label": "Ticagrelor", "group": "Prescribing (England)", "unit": "items per 1,000 patients (rate)", "source": "NHSBSA via PLDR (P_1_17)", "coverage": "England (+ partial border areas)"},
     "frailty": {"label": "Moderate/severe frailty (65+)", "group": "Frailty", "unit": "% of population aged 65+", "source": "Small Area Frailty Index via PLDR (MSOA level, shown per LSOA)", "coverage": "England only"},
-    "imd_health_en": {"label": "Health deprivation score (England)", "group": "Deprivation", "unit": "IMD2019 Health Domain score (higher = worse)", "source": "MHCLG English Indices of Deprivation 2019", "coverage": "England only"},
+    "imd_health_en": {"label": f"Health deprivation score (England, {latest_imd_year})", "group": "Deprivation", "unit": f"IMD{latest_imd_year} Health Deprivation & Disability score (higher = worse)", "source": f"MHCLG English Indices of Deprivation {latest_imd_year}", "coverage": "England only"},
+    "imd_health_en_2019": {"label": "Health deprivation score (England, 2019)", "group": "Deprivation", "unit": "IMD2019 Health Deprivation & Disability score (higher = worse)", "source": "MHCLG English Indices of Deprivation 2019", "coverage": "England only"},
+    "imd_health_en_change": {"label": f"Health deprivation, change 2019→{latest_imd_year} (England)", "group": "Deprivation", "unit": f"score-point change ({latest_imd_year} minus 2019) — see caveat, editions not fully comparable", "source": f"MHCLG English Indices of Deprivation, 2019 and {latest_imd_year} editions", "coverage": "England only", "scale": "diverging"},
     "wimd_health_wa": {"label": "Health domain score (Wales)", "group": "Deprivation", "unit": "WIMD2019 Health Domain score (higher = worse)", "source": "Welsh Government, WIMD 2019", "coverage": "Wales only"},
     "wimd_overall_wa": {"label": "Overall deprivation score (Wales)", "group": "Deprivation", "unit": "WIMD2019 overall score (higher = worse)", "source": "Welsh Government, WIMD 2019", "coverage": "Wales only"},
     "pct65": {"label": "Population aged 65+", "group": "Population context", "unit": "% of usual residents", "source": "ONS mid-year LSOA population estimates by broad age band", "coverage": "England & Wales"},
@@ -519,7 +578,8 @@ INDICATOR_META = {
     "census_health_change": {"label": "Change in bad health, 2011→2021", "group": "Census: self-reported health", "unit": "percentage-point change (2021 minus 2011)", "source": "ONS Census 2011 (KS301EW) and 2021 (TS037), via Nomis", "coverage": "England & Wales", "scale": "diverging"},
 }
 STATIC_YEAR_FALLBACK = {
-    "imd_health_en": "2019", "wimd_health_wa": "2019", "wimd_overall_wa": "2019", "pct65": "n/a",
+    "imd_health_en": latest_imd_year, "imd_health_en_2019": "2019", "imd_health_en_change": f"2019 vs {latest_imd_year}",
+    "wimd_health_wa": "2019", "wimd_overall_wa": "2019", "pct65": "n/a",
     "census2011_health": "2011", "census2021_health": "2021", "census_health_change": "2011 vs 2021",
 }
 
