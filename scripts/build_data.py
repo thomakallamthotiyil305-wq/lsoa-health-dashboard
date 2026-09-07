@@ -386,6 +386,9 @@ def add_percentiles(key):
 
 
 # ---------- 9. Derived statistics: year-on-year % change + z-score of change ----------
+change_years = {}   # key -> {"t0": ..., "t1": ...}, the exact two years YoY/z-score compare
+
+
 def add_change_stats(key):
     if key not in time_series:
         return
@@ -393,6 +396,7 @@ def add_change_stats(key):
     if len(years) < 2:
         return
     t1, t0 = years[-1], years[-2]
+    change_years[key] = {"t0": t0, "t1": t1}
     v1, v0 = time_series[key][t1], time_series[key][t0]
     common = [c for c in v1 if c in v0]
 
@@ -736,6 +740,26 @@ def quantile_breaks(values, n=5):
     return [round(values[min(int(len(values) * i / n), len(values) - 1)], 3) for i in range(1, n)]
 
 
+def diverging_breaks(values, neutral, n=5):
+    """
+    Same equal-count quantile breaks as quantile_breaks(), but for a
+    diverging measure with a meaningful "no change" reference point
+    (0 for YoY %/z-score, 1.0 for the age-adjusted ratio): snaps whichever
+    computed breakpoint falls closest to that reference to the reference
+    value exactly, rather than leaving it at some barely-off-zero decimal.
+    Legend bins are still built from real, roughly-equal-count quantiles —
+    only the one boundary nearest the reference moves, and only to make
+    "this bin is entirely above/below the reference" a question a reader
+    can answer at a glance instead of by inference.
+    """
+    breaks = quantile_breaks(values, n)
+    if not breaks:
+        return breaks
+    closest = min(range(len(breaks)), key=lambda i: abs(breaks[i] - neutral))
+    breaks[closest] = round(neutral, 3)
+    return breaks
+
+
 meta = {
     "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     "geography": "LSOA 2011 (England & Wales)",
@@ -744,6 +768,7 @@ meta = {
     "national_trends": national_trends,
     "national_comparisons": national_comparisons,
     "reform_impact": reform_impact,
+    "change_years": change_years,
     "indicators": {}
 }
 
@@ -800,7 +825,7 @@ for key in base_keys:
     m["n_lsoas"] = len(vals)
     m["min"] = round(min(vals), 3)
     m["max"] = round(max(vals), 3)
-    m["breaks"] = quantile_breaks(vals, 5)
+    m["breaks"] = diverging_breaks(vals, 0.0) if m.get("scale") == "diverging" else quantile_breaks(vals, 5)
 
     modes = ["raw", "pctile"]
     if key in TREND_KEYS and f"{key}_yoy" in indicator_values:
@@ -810,11 +835,14 @@ for key in base_keys:
     m["modes"] = modes
     m["has_trend"] = key in TREND_KEYS and key in time_series
 
-    for suffix, label_suffix in [("_yoy", None), ("_z", None), ("_adj", None), ("_adj_pctile", None)]:
+    # neutral=0.0 for YoY %/z-score ("no change"); neutral=1.0 for the
+    # age-adjusted ratio ("exactly as expected"); _adj_pctile is a 0-100
+    # percentile with no such reference point, so it keeps plain quantiles.
+    for suffix, neutral in [("_yoy", 0.0), ("_z", 0.0), ("_adj", 1.0), ("_adj_pctile", None)]:
         dk = f"{key}{suffix}"
         if dk in indicator_values:
             dvals = indicator_values[dk]
-            m[f"breaks{suffix}"] = quantile_breaks(dvals, 5)
+            m[f"breaks{suffix}"] = diverging_breaks(dvals, neutral) if neutral is not None else quantile_breaks(dvals, 5)
             m[f"min{suffix}"] = round(min(dvals), 3)
             m[f"max{suffix}"] = round(max(dvals), 3)
 

@@ -395,18 +395,38 @@ function buildMap(geojson) {
 }
 
 // ---------- Legend ----------
+// One consistent decimal count per legend, chosen by mode — so every row
+// shows the same precision instead of whatever a quantile happened to
+// compute (e.g. "2.32" next to "2.844"). Diverging modes also get their
+// natural "no change" reference value (0%, z=0, ratio=1.0) as an exact row
+// boundary (see diverging_breaks() in build_data.py) — the labels below
+// simply display that boundary at the same fixed precision as every other
+// row, so "0.00%" or "0.000" reads as a real, marked threshold rather than
+// an approximation.
+function formatLegendValue(v, mode, breaks) {
+  if (mode === "pctile") return String(Math.round(v));
+  if (mode === "yoy") return `${v.toFixed(2)}%`;
+  if (mode === "zscore") return v.toFixed(3);
+  if (mode === "ageadj") return `×${v.toFixed(2)}`;
+  const scale = Math.max(...breaks.map((x) => Math.abs(x)));
+  const decimals = scale >= 100 ? 0 : scale >= 10 ? 1 : 2;
+  return v.toFixed(decimals);
+}
+
 function buildLegend() {
   const m = state.meta.indicators[state.activeKey];
   const mode = state.viewMode;
   const b = breaksFor(m, mode);
   const ramp = rampFor(mode, m);
   const el = $("#legend");
-  const fmt = (n) => (Math.abs(n) >= 100 ? Math.round(n) : n);
-  const unitLabel = mode === "raw" ? m.unit
+  const fmt = (v) => formatLegendValue(v, mode, b);
+  const cy = (state.meta.change_years || {})[state.activeKey];
+  const yearsPhrase = cy ? `comparing ${cy.t0} → ${cy.t1}` : "comparing the two most recent years";
+  const unitLabel = mode === "raw" ? (m.scale === "diverging" ? `${m.unit} · 0 = no change` : m.unit)
     : mode === "pctile" ? "percentile rank (0–100)"
-    : mode === "yoy" ? "% change vs. previous year"
-    : mode === "zscore" ? "z-score of year-on-year change"
-    : "age-adjusted ratio (1.0 = as expected)";
+    : mode === "yoy" ? `${yearsPhrase} · 0% = no change · updates automatically as new data is published`
+    : mode === "zscore" ? `${yearsPhrase} vs. every other area's change · 0 = typical · updates automatically as new data is published`
+    : "age-adjusted ratio (1.0 = exactly as the local age profile predicts)";
 
   const labels = [
     `< ${fmt(b[0])}`,
