@@ -240,39 +240,60 @@ function buildHowToRead() {
   const activeMeta = state.meta.indicators[state.activeKey];
   const rawIsDiverging = mode === "raw" && activeMeta && activeMeta.scale === "diverging";
   const swatch = (c) => `<span class="mini-swatch" style="background:${c}"></span>`;
-  let html = "";
+  let intro = "";
+  let rows = "";
 
   if (mode === "raw" && !rawIsDiverging) {
-    html = `
-      <li>${swatch(RAMP_SEQUENTIAL[4])}<strong>Darker blue</strong> = a higher value for the indicator selected on the left</li>
+    intro = "Colours show the raw value for the selected indicator.";
+    rows = `
+      <li>${swatch(RAMP_SEQUENTIAL[4])}<strong>Darker blue</strong> = a higher value</li>
       <li>${swatch(RAMP_SEQUENTIAL[0])}<strong>Lighter blue</strong> = a lower value</li>
-      <li>${swatch(NO_DATA_COLOR)}<strong>Grey</strong> = no data published for this area for that indicator</li>
+      <li>${swatch(NO_DATA_COLOR)}<strong>Grey</strong> = data unavailable for this area</li>
     `;
   } else if (mode === "pctile") {
-    html = `
-      <li>This view uses the <strong>Viridis</strong> colour scale (chosen for being colourblind-safe) — it's not a simple light/dark scale, it runs through four colours:</li>
-      <li>${swatch(RAMP_VIRIDIS[0])}<strong>Dark purple</strong> = lowest percentile (near 0) for the indicator on the left</li>
-      <li>${swatch(RAMP_VIRIDIS[2])}<strong>Teal / green</strong> = mid-range (around the 50th percentile)</li>
-      <li>${swatch(RAMP_VIRIDIS[4])}<strong>Yellow</strong> = highest percentile (near 100)</li>
-      <li>${swatch(NO_DATA_COLOR)}<strong>Grey</strong> = no data published for this area for that indicator</li>
+    intro = "Colours show how this area ranks against every other area, from lowest to highest.";
+    rows = `
+      <li>${swatch(RAMP_VIRIDIS[0])}<strong>Dark purple</strong> = among the lowest values</li>
+      <li>${swatch(RAMP_VIRIDIS[2])}<strong>Teal / green</strong> = around the middle</li>
+      <li>${swatch(RAMP_VIRIDIS[4])}<strong>Yellow</strong> = among the highest values</li>
+      <li>${swatch(NO_DATA_COLOR)}<strong>Grey</strong> = data unavailable for this area</li>
+    `;
+  } else if (mode === "yoy") {
+    intro = "Colours show the year-on-year change in the selected indicator.";
+    rows = `
+      <li>${swatch(RAMP_DIVERGING[0])}<strong>Blue</strong> = a decrease from the previous year</li>
+      <li>${swatch(RAMP_DIVERGING[2])}<strong>Pale yellow</strong> = values closest to zero (little change)</li>
+      <li>${swatch(RAMP_DIVERGING[4])}<strong>Red</strong> = an increase from the previous year</li>
+      <li>${swatch(NO_DATA_COLOR)}<strong>Grey</strong> = data unavailable for this area</li>
+    `;
+  } else if (mode === "zscore") {
+    intro = "Colours show how unusual this area's year-on-year change was, compared with every other area.";
+    rows = `
+      <li>${swatch(RAMP_DIVERGING[0])}<strong>Blue</strong> = falling faster (or rising slower) than most areas</li>
+      <li>${swatch(RAMP_DIVERGING[2])}<strong>Pale yellow</strong> = a typical change for this indicator</li>
+      <li>${swatch(RAMP_DIVERGING[4])}<strong>Red</strong> = rising faster (or falling slower) than most areas</li>
+      <li>${swatch(NO_DATA_COLOR)}<strong>Grey</strong> = data unavailable for this area</li>
+    `;
+  } else if (mode === "ageadj") {
+    intro = "Colours show how this area's rate compares with what its local age profile alone would predict.";
+    rows = `
+      <li>${swatch(RAMP_DIVERGING[0])}<strong>Blue</strong> = lower than expected for the local age profile</li>
+      <li>${swatch(RAMP_DIVERGING[2])}<strong>Pale yellow</strong> = about as expected</li>
+      <li>${swatch(RAMP_DIVERGING[4])}<strong>Red</strong> = higher than expected for the local age profile</li>
+      <li>${swatch(NO_DATA_COLOR)}<strong>Grey</strong> = data unavailable for this area</li>
     `;
   } else {
-    const isAgeAdj = mode === "ageadj";
-    const neutralLabel = isAgeAdj ? "about 1.0 — as expected for the local age profile" : "about 0 — no meaningful change";
-    const lowLabel = isAgeAdj ? "well below 1.0 (lower than the area's age profile would predict)" : "a sharp decrease";
-    const highLabel = isAgeAdj ? "well above 1.0 (higher than the area's age profile would predict)" : "a sharp increase";
-    html = `
-      <li>This view uses a <strong>blue–yellow–red diverging</strong> scale, since it's measuring direction as well as size:</li>
-      <li>${swatch(RAMP_DIVERGING[0])}<strong>Blue</strong> = ${lowLabel}</li>
-      <li>${swatch(RAMP_DIVERGING[2])}<strong>Pale yellow</strong> = ${neutralLabel}</li>
-      <li>${swatch(RAMP_DIVERGING[4])}<strong>Red</strong> = ${highLabel}</li>
-      <li>${swatch(NO_DATA_COLOR)}<strong>Grey</strong> = no data published for this area for that indicator</li>
+    // raw-mode-diverging: census/IMD change layers — a two-point change, not an annual one.
+    intro = "Colours show the change between the two points named in the legend.";
+    rows = `
+      <li>${swatch(RAMP_DIVERGING[0])}<strong>Blue</strong> = a decrease</li>
+      <li>${swatch(RAMP_DIVERGING[2])}<strong>Pale yellow</strong> = little change</li>
+      <li>${swatch(RAMP_DIVERGING[4])}<strong>Red</strong> = an increase</li>
+      <li>${swatch(NO_DATA_COLOR)}<strong>Grey</strong> = data unavailable for this area</li>
     `;
   }
 
-  const indicatorCount = Object.keys(state.meta.indicators).length;
-  html += `<li><strong>Click any shaded area</strong> on the map for its full health profile — all ${indicatorCount} indicators, with sources — right here in this panel</li>`;
-  el.innerHTML = html;
+  el.innerHTML = `<li>${intro}</li>${rows}<li><strong>Click an area</strong> to view its indicator values and data sources.</li>`;
 }
 
 const VIEW_MODE_HELP = {
