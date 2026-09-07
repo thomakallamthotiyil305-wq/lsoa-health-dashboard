@@ -2958,5 +2958,161 @@
       "t0": "2023",
       "t1": "2024"
     }
+  },
+  "age_adjustment_diagnostics": {
+    "chd": {
+      "n": 32968,
+      "r2_full": 0.4278,
+      "adj_r2_full": 0.4278,
+      "r2_reduced": 0.3816,
+      "adj_r2_reduced": 0.3816,
+      "f_stat": 887.93,
+      "f_df1": 3,
+      "f_df2": 32963,
+      "f_pvalue": 0.0
+    },
+    "copd": {
+      "n": 32968,
+      "r2_full": 0.1139,
+      "adj_r2_full": 0.1138,
+      "r2_reduced": 0.0909,
+      "adj_r2_reduced": 0.0909,
+      "f_stat": 284.17,
+      "f_df1": 3,
+      "f_df2": 32963,
+      "f_pvalue": 3.9443713739637084e-182
+    },
+    "af": {
+      "n": 32968,
+      "r2_full": 0.5629,
+      "adj_r2_full": 0.5628,
+      "r2_reduced": 0.5284,
+      "adj_r2_reduced": 0.5284,
+      "f_stat": 866.52,
+      "f_df1": 3,
+      "f_df2": 32963,
+      "f_pvalue": 0.0
+    },
+    "stroke": {
+      "n": 32968,
+      "r2_full": 0.4824,
+      "adj_r2_full": 0.4823,
+      "r2_reduced": 0.4514,
+      "adj_r2_reduced": 0.4514,
+      "f_stat": 657.17,
+      "f_df1": 3,
+      "f_df2": 32963,
+      "f_pvalue": 0.0
+    },
+    "ckd": {
+      "n": 32968,
+      "r2_full": 0.3126,
+      "adj_r2_full": 0.3125,
+      "r2_reduced": 0.2862,
+      "adj_r2_reduced": 0.2862,
+      "f_stat": 421.3,
+      "f_df1": 3,
+      "f_df2": 32963,
+      "f_pvalue": 1.3381281932634395e-268
+    },
+    "hf": {
+      "n": 32968,
+      "r2_full": 0.2921,
+      "adj_r2_full": 0.2921,
+      "r2_reduced": 0.2723,
+      "adj_r2_reduced": 0.2723,
+      "f_stat": 307.28,
+      "f_df1": 3,
+      "f_df2": 32963,
+      "f_pvalue": 8.924223681890691e-197
+    },
+    "pad": {
+      "n": 32968,
+      "r2_full": 0.1815,
+      "adj_r2_full": 0.1814,
+      "r2_reduced": 0.1648,
+      "adj_r2_reduced": 0.1648,
+      "f_stat": 224.53,
+      "f_df1": 3,
+      "f_df2": 32963,
+      "f_pvalue": 3.3122251535065383e-144
+    },
+    "osteo": {
+      "n": 32968,
+      "r2_full": 0.1536,
+      "adj_r2_full": 0.1535,
+      "r2_reduced": 0.1512,
+      "adj_r2_reduced": 0.1512,
+      "f_stat": 30.59,
+      "f_df1": 3,
+      "f_df2": 32963,
+      "f_pvalue": 9.675882612619717e-20
+    },
+    "statins": {
+      "n": 33679,
+      "r2_full": 0.0959,
+      "adj_r2_full": 0.0958,
+      "r2_reduced": 0.0664,
+      "adj_r2_reduced": 0.0664,
+      "f_stat": 365.66,
+      "f_df1": 3,
+      "f_df2": 33674,
+      "f_pvalue": 1.0117870259518485e-233
+    },
+    "oac": {
+      "n": 33679,
+      "r2_full": 0.2389,
+      "adj_r2_full": 0.2388,
+      "r2_reduced": 0.2193,
+      "adj_r2_reduced": 0.2193,
+      "f_stat": 288.23,
+      "f_df1": 3,
+      "f_df2": 33674,
+      "f_pvalue": 9.358492368173491e-185
+    },
+    "anticoag": {
+      "n": 33679,
+      "r2_full": 0.2304,
+      "adj_r2_full": 0.2303,
+      "r2_reduced": 0.2083,
+      "adj_r2_reduced": 0.2082,
+      "f_stat": 323.54,
+      "f_df1": 3,
+      "f_df2": 33674,
+      "f_pvalue": 4.003139296818688e-207
+    },
+    "clopidogrel": {
+      "n": 33679,
+      "r2_full": 0.0822,
+      "adj_r2_full": 0.0821,
+      "r2_reduced": 0.071,
+      "adj_r2_reduced": 0.071,
+      "f_stat": 136.81,
+      "f_df1": 3,
+      "f_df2": 33674,
+      "f_pvalue": 4.2101748231462455e-88
+    },
+    "prasugrel": {
+      "n": 33679,
+      "r2_full": 0.0128,
+      "adj_r2_full": 0.0127,
+      "r2_reduced": 0.0022,
+      "adj_r2_reduced": 0.0021,
+      "f_stat": 121.35,
+      "f_df1": 3,
+      "f_df2": 33674,
+      "f_pvalue": 3.57238541126736e-78
+    },
+    "ticagrelor": {
+      "n": 33679,
+      "r2_full": 0.0233,
+      "adj_r2_full": 0.0232,
+      "r2_reduced": 0.0015,
+      "adj_r2_reduced": 0.0015,
+      "f_stat": 249.94,
+      "f_df1": 3,
+      "f_df2": 33674,
+      "f_pvalue": 1.9913452374600117e-160
+    }
   }
 }

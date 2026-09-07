@@ -898,14 +898,36 @@ function buildAboutModal() {
     age-standardised rate without being one: Health Survey for England has genuinely age-specific prevalence for some conditions, but it's
     self-reported survey diagnosis, not GP disease-register counts — a different measurement system than QOF; and the old APHO/PHE "expected
     prevalence" models built for exactly this kind of comparison appear to be discontinued 2008–2013-era models, too stale to apply to current data.</p>
-    <p>What's shown instead is an <strong>indirect-standardisation-style ratio</strong>, using every local age band this data supports: a multiple
-    regression of each condition's rate against the local population share in four age bands (16–29, 30–44, 45–64, 65+; 0–15 is the implicit
-    reference category) across every LSOA in England, then <code>ratio = observed rate ÷ rate the regression predicts from this area's full age
-    profile</code>. This is an upgrade from an earlier version of this dashboard that used only % aged 65+ as a single covariate — using the complete
-    local age structure captures more of the real age-driven variation (R² improved for every single indicator when this was tested, e.g. atrial
-    fibrillation's rose from 0.53 to 0.56, statins prescribing's from 0.07 to 0.10) — but it's still a regression-based proxy, not age-specific
-    rates re-weighted onto a standard population. Treat it as a genuinely useful, transparent approximation, not an official age-standardised
-    statistic.</p>
+    <h4>3.1 — How the adjustment is actually calculated, and how to read the resulting ratio</h4>
+    <p>What's shown is an <strong>indirect-standardisation-style ratio</strong>, using every local age band this data supports. For each condition,
+    one multiple linear regression is fit once across every LSOA in England: <code>rate ~ % aged 16–29 + % aged 30–44 + % aged 45–64 + % aged 65+</code>
+    (the fifth band, % aged 0–15, is the implicit reference category — omitted deliberately, because all five bands are shares of the same 100% and
+    including all five alongside an intercept would be perfectly collinear). That single fitted regression then supplies, for every LSOA, a
+    <em>predicted</em> rate — "the rate a typical area with this exact age profile would have" — and each area's ratio is:</p>
+    <p style="text-align:center;"><code>adjusted ratio = observed rate ÷ rate predicted from this area's own age profile</code></p>
+    <p>Read the ratio as a departure from age-driven expectation, not as an age-standardised rate itself: <strong>1.0</strong> means the area's rate
+    is exactly what its age structure alone would predict; <strong>above 1.0</strong> means higher than age explains (something other than age
+    structure is driving extra cases — deprivation, environment, access to care, diagnosis rates, or genuine clustering); <strong>below 1.0</strong>
+    means lower. It answers "does this area have more or fewer cases than its age profile predicts," not "what would this area's rate be if it had
+    a standard population's age structure" — the latter is what a true directly age-standardised rate answers, and this data cannot compute that
+    (see the limitation above).</p>
+
+    <h4>3.2 — Does the fuller age-band model actually improve the adjustment, or does R² just go up because it has more predictors?</h4>
+    <p>This is a real methodological question, not a rhetorical one: R² is <strong>mechanically non-decreasing</strong> whenever predictors are
+    added to an ordinary least-squares regression fit on the same data, regardless of whether those predictors carry any genuine signal — a model
+    can gain R² purely from having more parameters available to fit noise with. An earlier version of this dashboard used only % aged 65+ as a
+    single covariate, and reported that R² rose for every indicator when upgraded to the current 4-band model; on its own, that comparison is weak
+    evidence, because going from 1 predictor to 4 will tend to raise R² even if the extra three add nothing real. Two corrections are computed
+    instead of relying on that comparison:</p>
+    <ul>
+      <li><strong>Adjusted R²</strong>, which penalises additional predictors and only rises if a predictor improves fit by more than chance alone
+      would produce.</li>
+      <li>A <strong>nested F-test</strong> — the full 4-band model against the reduced % 65+-only model — which gives an actual significance test
+      for whether the extra three age bands explain genuinely more variance, with a real p-value, rather than an eyeballed R² comparison.</li>
+    </ul>
+    ${buildAgeAdjustmentDiagnosticsTable()}
+    <p>Even with that correction, this is still a regression-based proxy, not age-specific rates re-weighted onto a standard population — treat it
+    as a genuinely useful, transparent approximation, not an official age-standardised statistic.</p>
 
     <h3>National trends over time, and NHS commissioning reforms</h3>
     <p>These charts show the England-wide average (and 10th–90th percentile spread) for each condition with a multi-year series, with vertical dashed
@@ -1010,6 +1032,72 @@ function pickExampleIndicator(key) {
     }
   }
   return null;
+}
+
+// ----------------------------------------------------------------------
+// Age-adjustment model diagnostics: proper evidence for whether the full
+// 4-age-band regression genuinely improves on the simpler % 65+-only
+// model, rather than a bare R² comparison (which is mechanically
+// non-decreasing when predictors are added, so on its own proves
+// nothing — see fit_age_adjustment()'s docstring in build_data.py for the
+// full reasoning behind computing adjusted R² and a nested F-test here).
+// ----------------------------------------------------------------------
+function formatPValue(p) {
+  if (p < 0.0001) return "< 0.0001";
+  return p.toFixed(4);
+}
+
+function buildAgeAdjustmentDiagnosticsTable() {
+  const diag = state.meta.age_adjustment_diagnostics || {};
+  const rows = Object.keys(diag)
+    .map((key) => ({ key, label: (state.meta.indicators[key] || {}).label || key, ...diag[key] }))
+    .filter((r) => state.meta.indicators[r.key]);
+  if (!rows.length) return "";
+  rows.sort((a, b) => (b.adj_r2_full - b.adj_r2_reduced) - (a.adj_r2_full - a.adj_r2_reduced));
+
+  const tableRows = rows.map((r) => {
+    const delta = r.adj_r2_full - r.adj_r2_reduced;
+    return `
+    <tr>
+      <td>${r.label}</td>
+      <td>${r.n.toLocaleString()}</td>
+      <td>${r.adj_r2_reduced.toFixed(3)}</td>
+      <td>${r.adj_r2_full.toFixed(3)}</td>
+      <td>${delta >= 0 ? "+" : ""}${delta.toFixed(3)}</td>
+      <td>F(${r.f_df1}, ${r.f_df2.toLocaleString()}) = ${r.f_stat.toFixed(1)}</td>
+      <td>${formatPValue(r.f_pvalue)}</td>
+    </tr>`;
+  }).join("");
+
+  // Illustrate the "significant ≠ practically important" point with
+  // whichever indicators the live data actually shows it for, rather than
+  // naming one hardcoded example that could stop being true after a
+  // future data refresh.
+  const biggest = rows[0];
+  const smallest = rows[rows.length - 1];
+
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Indicator</th><th>LSOAs (n)</th>
+          <th>Adj. R² (% 65+ only)</th><th>Adj. R² (full 4-band model)</th><th>Δ Adj. R²</th>
+          <th>Nested F-test</th><th>p-value</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+    <p>Every indicator's F-test is statistically significant — the extra three age bands are not just fitting noise, they carry
+    genuine additional explanatory power beyond % 65+ alone. But with sample sizes in the tens of thousands, statistical
+    significance is easy to reach even for a practically tiny effect, so the p-value alone is not the number to focus on. Look at
+    the <strong>Δ Adj. R²</strong> column instead: for ${biggest.label}, the fuller age model explains a real extra
+    ${(( biggest.adj_r2_full - biggest.adj_r2_reduced) * 100).toFixed(1)} percentage points of cross-area variance
+    (${biggest.adj_r2_reduced.toFixed(3)} → ${biggest.adj_r2_full.toFixed(3)}) — a substantively meaningful improvement. For
+    ${smallest.label}, the improvement is only ${((smallest.adj_r2_full - smallest.adj_r2_reduced) * 100).toFixed(1)} percentage
+    points (${smallest.adj_r2_reduced.toFixed(3)} → ${smallest.adj_r2_full.toFixed(3)}) — technically significant, but not a
+    meaningfully better age-adjustment in practice. This is exactly why "R² went up" was never sufficient evidence on its own,
+    and why both numbers are reported here rather than one.</p>
+  `;
 }
 
 function buildNationalTrendChart(key) {

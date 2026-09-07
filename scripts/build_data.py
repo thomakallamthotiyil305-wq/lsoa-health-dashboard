@@ -52,6 +52,7 @@ from collections import defaultdict
 
 import pandas as pd
 import numpy as np
+from scipy import stats
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "data" / "raw"
@@ -424,6 +425,9 @@ def add_change_stats(key):
 
 
 # ---------- 10. Derived statistic: age-profile-adjusted ratio (QOF conditions only) ----------
+age_adjustment_diagnostics = {}   # key -> {n, r2_full, adj_r2_full, r2_reduced, adj_r2_reduced, f_stat, f_df1, f_df2, f_pvalue}
+
+
 def fit_age_adjustment(key):
     """
     Indirect-standardisation-style adjustment, NOT a true directly age-
@@ -446,47 +450,92 @@ def fit_age_adjustment(key):
         2008-2013-era models — using decade-plus-stale age-specific rates
         against 2024 registers would itself be a validity problem.
 
-    What this computes instead: multiple linear regression of
-    rate ~ every local age band (0-15 held out as the reference category,
-    since all bands are shares of the same 100% and including it too would
-    be perfectly collinear with the intercept), fit once across every LSOA
-    with data, then for each LSOA:
+    What this computes instead (the "full" model): multiple linear
+    regression of rate ~ every local age band (0-15 held out as the
+    reference category, since all bands are shares of the same 100% and
+    including it too would be perfectly collinear with the intercept),
+    fit once across every LSOA with data, then for each LSOA:
         adjusted_ratio = observed_rate / rate_predicted_from_its_own_age_structure
     A ratio of 1.0 means "exactly what you'd expect given this area's full
     age profile"; above 1.0 means higher than age structure alone would
     predict; below 1.0 means lower. This is the same logic as an indirect-
-    standardisation / SMR-style ratio, upgraded from an earlier version of
-    this function that used only % 65+ as a single covariate — using the
-    complete local age structure (all 5 bands) captures more of the real
-    age-driven variation than one crude cutoff did, though it's still a
-    regression-based proxy, not age-specific rates re-weighted onto a
-    standard population. Documented plainly in the About panel so this is
-    never mistaken for a certified age-standardised rate.
+    standardisation / SMR-style ratio: age structure is used as a predictor
+    of the *expected* rate, and the ratio expresses how far the *observed*
+    rate departs from that expectation — it is not, and does not claim to
+    be, age-specific rates re-weighted onto a standard population.
+
+    On R² and predictor count (the thing this docstring most needs to be
+    honest about): an earlier version of this function used only % aged
+    65+ as a single covariate (the "reduced" model below), and reported
+    that R² rose for every indicator when upgraded to the full 4-band
+    model. That comparison alone is weak evidence: R² is mechanically
+    non-decreasing whenever predictors are added to an OLS fit on the same
+    data, regardless of whether those predictors carry genuine signal — a
+    model can gain R² purely from having more parameters to fit noise
+    with. Two corrections are computed here instead of a bare R² delta:
+      - adjusted R², which penalises additional predictors and only rises
+        if a predictor improves fit by more than chance would predict;
+      - a nested F-test (full model vs. the reduced % 65+-only model),
+        which gives a proper significance test for whether the extra three
+        age bands explain genuinely more variance, with an actual p-value,
+        rather than eyeballing whether R² went up.
+    Both are stored in age_adjustment_diagnostics and surfaced in the
+    About panel so a reader sees the actual evidence, not just a claim.
     """
     pairs = [(code, rec["v"][key]) for code, rec in records.items() if key in rec.get("v", {}) and code in age_structure]
     if len(pairs) < 30:
         return
     codes = [p[0] for p in pairs]
     y = np.array([p[1] for p in pairs])
-    # 0-15 is the implicit reference band (held out to avoid the perfect
-    # collinearity of including all 5 shares of 100% alongside an intercept).
-    covariate_bands = [b for b in AGE_BANDS if b != "0_15"]
-    X = np.column_stack(
-        [np.ones(len(codes))] + [np.array([age_structure[c][b] for c in codes]) for b in covariate_bands]
-    )
-    coefs, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
-    predicted = X @ coefs
-    predicted = np.where(predicted <= 0, np.nan, predicted)
-    ratio = y / predicted
-    r2 = 1 - np.nansum((y - predicted) ** 2) / np.sum((y - y.mean()) ** 2)
+    n = len(codes)
 
+    # Full model: intercept + 4 age bands (0-15 held out as reference).
+    covariate_bands = [b for b in AGE_BANDS if b != "0_15"]
+    X_full = np.column_stack(
+        [np.ones(n)] + [np.array([age_structure[c][b] for c in codes]) for b in covariate_bands]
+    )
+    coefs_full, _, _, _ = np.linalg.lstsq(X_full, y, rcond=None)
+    predicted_full = X_full @ coefs_full
+    ss_res_full = float(np.sum((y - predicted_full) ** 2))
+
+    # Reduced model: intercept + % 65+ only — exactly what this dashboard
+    # used before, kept here purely as the baseline for the nested F-test.
+    x_65 = np.array([age_structure[c]["65_plus"] for c in codes])
+    X_reduced = np.column_stack([np.ones(n), x_65])
+    coefs_reduced, _, _, _ = np.linalg.lstsq(X_reduced, y, rcond=None)
+    predicted_reduced = X_reduced @ coefs_reduced
+    ss_res_reduced = float(np.sum((y - predicted_reduced) ** 2))
+
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    p_full, p_reduced = X_full.shape[1] - 1, X_reduced.shape[1] - 1   # predictors, excluding intercept
+    r2_full = 1 - ss_res_full / ss_tot
+    r2_reduced = 1 - ss_res_reduced / ss_tot
+    adj_r2_full = 1 - (1 - r2_full) * (n - 1) / (n - p_full - 1)
+    adj_r2_reduced = 1 - (1 - r2_reduced) * (n - 1) / (n - p_reduced - 1)
+
+    # Nested F-test: does the full model explain significantly more
+    # variance than the reduced (% 65+ only) model, beyond what adding
+    # 3 extra parameters would explain by chance alone?
+    df1, df2 = p_full - p_reduced, n - p_full - 1
+    f_stat = ((ss_res_reduced - ss_res_full) / df1) / (ss_res_full / df2)
+    f_pvalue = float(stats.f.sf(f_stat, df1, df2))
+
+    age_adjustment_diagnostics[key] = {
+        "n": n, "r2_full": round(r2_full, 4), "adj_r2_full": round(adj_r2_full, 4),
+        "r2_reduced": round(r2_reduced, 4), "adj_r2_reduced": round(adj_r2_reduced, 4),
+        "f_stat": round(float(f_stat), 2), "f_df1": df1, "f_df2": df2, "f_pvalue": f_pvalue,
+    }
+
+    predicted_for_ratio = np.where(predicted_full <= 0, np.nan, predicted_full)
+    ratio = y / predicted_for_ratio
     n_applied = 0
     for code, r in zip(codes, ratio):
         if np.isfinite(r):
             records[code].setdefault("v", {})[f"{key}_adj"] = round(float(r), 3)
             n_applied += 1
-    print(f"  {key}: age-adjusted ratio for {n_applied} LSOAs "
-          f"(R²={r2:.3f} — full local age structure explains {r2*100:.0f}% of cross-LSOA variance)")
+    print(f"  {key}: age-adjusted ratio for {n_applied} LSOAs — "
+          f"adj.R²={adj_r2_full:.3f} (was {adj_r2_reduced:.3f} with % 65+ alone), "
+          f"F({df1},{df2})={f_stat:.1f}, p={f_pvalue:.2e}")
 
 
 def national_trend(key):
@@ -769,6 +818,7 @@ meta = {
     "national_comparisons": national_comparisons,
     "reform_impact": reform_impact,
     "change_years": change_years,
+    "age_adjustment_diagnostics": age_adjustment_diagnostics,
     "indicators": {}
 }
 

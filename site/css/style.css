@@ -355,6 +355,7 @@ a { color: var(--accent-dark); }
 .modal-scroll { overflow-y: auto; max-height: 88vh; padding: 32px 36px; }
 .modal-scroll h2 { margin-top: 0; }
 .modal-scroll h3 { font-size: 14.5px; margin-top: 26px; margin-bottom: 8px; }
+.modal-scroll h4 { font-size: 13px; margin-top: 18px; margin-bottom: 6px; color: var(--text-secondary); }
 .modal-scroll p, .modal-scroll li { font-size: 13.5px; line-height: 1.6; color: var(--text-secondary); }
 .modal-lede { font-size: 14px; color: var(--text-primary); background: var(--page-plane); padding: 12px 14px; border-radius: 10px; border-left: 3px solid var(--accent); }
 .modal-scroll ul { padding-left: 20px; }

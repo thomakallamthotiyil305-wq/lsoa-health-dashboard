@@ -29,7 +29,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install pandas numpy odfpy openpyxl
+        run: pip install pandas numpy scipy odfpy openpyxl
 
       - name: Fetch latest raw data from all sources
         run: python3 scripts/fetch_raw.py

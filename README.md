@@ -146,7 +146,7 @@ A second modal (separate from "Data & methodology") holds two more things:
 ## Running the pipeline manually
 
 ```bash
-pip install pandas odfpy openpyxl
+pip install pandas numpy scipy odfpy openpyxl
 python3 scripts/fetch_raw.py    # downloads/refreshes data/raw/
 python3 scripts/build_data.py   # rebuilds site/data/lsoa_core.json + lsoa_ind_*.json + meta.json
 ```
