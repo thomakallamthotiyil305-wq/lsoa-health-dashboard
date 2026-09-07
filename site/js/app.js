@@ -270,7 +270,8 @@ function buildHowToRead() {
     `;
   }
 
-  html += `<li><strong>Click any shaded area</strong> on the map for its full health profile — all 18 indicators, with sources — right here in this panel</li>`;
+  const indicatorCount = Object.keys(state.meta.indicators).length;
+  html += `<li><strong>Click any shaded area</strong> on the map for its full health profile — all ${indicatorCount} indicators, with sources — right here in this panel</li>`;
   el.innerHTML = html;
 }
 
